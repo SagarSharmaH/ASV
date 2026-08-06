@@ -14,10 +14,11 @@ const words = ["HELLO", "THANK YOU", "YES", "PLEASE", "HELP"]
 
 export function LiveDetection({ onNavigate }: LiveDetectionProps) {
   const [isListening, setIsListening] = useState(true)
-  const [detectedWord, setDetectedWord] = useState("HELLO")
-  const [confidence, setConfidence] = useState(94)
+  const [isDemoMode, setIsDemoMode] = useState(true)
+  const [detectedWord, setDetectedWord] = useState("--")
+  const [confidence, setConfidence] = useState(0)
   const [waveformData, setWaveformData] = useState<number[]>(
-    Array(30).fill(0).map(() => Math.random() * 40 + 10)
+    Array(30).fill(0)
   )
 
   // Simulate EMG waveform
@@ -37,7 +38,7 @@ export function LiveDetection({ onNavigate }: LiveDetectionProps) {
 
   // Simulate word detection
   useEffect(() => {
-    if (!isListening) return
+    if (!isListening || !isDemoMode) return
 
     const interval = setInterval(() => {
       const randomWord = words[Math.floor(Math.random() * words.length)]
@@ -46,7 +47,16 @@ export function LiveDetection({ onNavigate }: LiveDetectionProps) {
     }, 4000)
 
     return () => clearInterval(interval)
-  }, [isListening])
+  }, [isListening, isDemoMode])
+
+  // Clear data when not in demo mode (since we have no real data yet)
+  useEffect(() => {
+    if (!isDemoMode) {
+      setDetectedWord("--")
+      setConfidence(0)
+      setWaveformData(Array(30).fill(4))
+    }
+  }, [isDemoMode])
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-background px-6 py-8">
@@ -78,9 +88,25 @@ export function LiveDetection({ onNavigate }: LiveDetectionProps) {
       >
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Live Detection</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Real-time EMG analysis</p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">Real-time EMG analysis</p>
+            {isDemoMode && (
+              <span className="rounded-md bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+                Demo Mode
+              </span>
+            )}
+          </div>
         </div>
-        <Button
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsDemoMode(!isDemoMode)}
+            className="text-xs"
+          >
+            {isDemoMode ? "Live Mode" : "Demo Mode"}
+          </Button>
+          <Button
           variant="ghost"
           size="icon"
           onClick={() => onNavigate("settings")}
@@ -221,16 +247,16 @@ export function LiveDetection({ onNavigate }: LiveDetectionProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">AI Model</span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                  Active
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${isDemoMode ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                  {isDemoMode ? 'Mock Active' : 'Not Trained'}
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                ASV Neural Engine v3.2
+                ASV Neural Engine
               </p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-semibold text-foreground">12ms</p>
+              <p className="text-lg font-semibold text-foreground">--</p>
               <p className="text-xs text-muted-foreground">Latency</p>
             </div>
           </div>

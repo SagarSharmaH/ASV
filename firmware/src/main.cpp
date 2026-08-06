@@ -43,8 +43,9 @@ BLEModule ble_module;            // BLE module
 #define I2C_SCL_PIN 22           // GPIO22 for I2C SCL
 #define I2C_FREQUENCY 100000     // 100kHz I2C bus speed
 
-#define LOOP_DELAY_MS 500        // Main loop delay
-#define ADC_SAMPLES 10           // Samples for averaging
+#define TARGET_SAMPLE_RATE_HZ 500
+#define SAMPLE_INTERVAL_US (1000000 / TARGET_SAMPLE_RATE_HZ)
+#define NUM_CHANNELS 4
 
 // ============================================================================
 // GLOBAL STATE VARIABLES
@@ -55,8 +56,8 @@ bool ble_initialized = false;
 bool ads_connected = false;
 bool oled_connected = false;
 
-unsigned long loop_counter = 0;
-unsigned long last_update_time = 0;
+unsigned long last_sample_us = 0;
+unsigned long last_display_ms = 0;
 
 // ============================================================================
 // SERIAL COMMUNICATION UTILITIES
@@ -73,23 +74,12 @@ void print_separator(const char* title) {
 
 void print_system_info() {
     print_separator("SYSTEM INFORMATION");
-    
     Serial.println("[INFO] Device: ESP32 DevKit V1");
-    Serial.println("[INFO] Firmware: ASV Silent Speech Recognition");
-    Serial.println("[INFO] Version: 1.0.0");
-    Serial.println("[INFO] Board: esp32doit-devkit1");
-    Serial.println("[INFO] Arduino Framework: ESP32 Arduino");
-    
-    Serial.print("[INFO] Chip ID: ");
-    Serial.println(ESP.getChipId(), HEX);
-    
-    Serial.print("[INFO] Flash Size: ");
-    Serial.print(ESP.getFlashChipSize() / 1024 / 1024);
-    Serial.println(" MB");
-    
-    Serial.print("[INFO] Free RAM: ");
-    Serial.print(ESP.getFreeHeap() / 1024);
-    Serial.println(" KB");
+    Serial.println("[INFO] Firmware: ASV Silent Speech Recognition - ACQUISITION MODE");
+    Serial.println("[INFO] Version: 1.1.0");
+    Serial.print("[INFO] Target Rate: ");
+    Serial.print(TARGET_SAMPLE_RATE_HZ);
+    Serial.println(" Hz");
 }
 
 // ============================================================================
@@ -97,109 +87,43 @@ void print_system_info() {
 // ============================================================================
 
 void setup() {
-    // Initialize serial communication
     Serial.begin(115200);
-    
-    // Wait for serial to be ready
     delay(1000);
-    
-    print_separator("ASV - A SILENT VOICE");
-    Serial.println("[STARTUP] Initializing ESP32 firmware...\n");
     
     print_system_info();
     
-    // ========================================================================
-    // Step 1: Initialize I2C Bus
-    // ========================================================================
-    print_separator("STEP 1: I2C BUS INITIALIZATION");
-    Serial.println("[I2C] Initializing I2C bus...");
-    Serial.println("[I2C] Configuration:");
-    Serial.println("[I2C]   - SDA Pin: GPIO" + String(I2C_SDA_PIN));
-    Serial.println("[I2C]   - SCL Pin: GPIO" + String(I2C_SCL_PIN));
-    Serial.println("[I2C]   - Frequency: " + String(I2C_FREQUENCY / 1000) + " kHz\n");
-    
     i2c_scanner.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQUENCY);
-    
-    // Scan for I2C devices
     delay(500);
     int devices_found = i2c_scanner.scan();
-    
-    if (devices_found < 2) {
-        Serial.println("[ERROR] Not all required I2C devices found!");
-        Serial.println("[ERROR] Expected: ADS1115 (0x48) + SSD1306 (0x3C)");
-    }
-    
-    // ========================================================================
-    // Step 2: Initialize OLED Display
-    // ========================================================================
-    print_separator("STEP 2: OLED DISPLAY INITIALIZATION");
-    Serial.println("[OLED] Initializing SSD1306 128x64 display...\n");
     
     if (oled_display.begin()) {
         oled_connected = true;
         oled_display.showSplash();
-        delay(2000);
-        Serial.println("[OLED] ✓ Display initialized successfully\n");
-    } else {
-        Serial.println("[OLED] ✗ FAILED to initialize display!\n");
+        delay(1000);
     }
-    
-    // ========================================================================
-    // Step 3: Initialize ADS1115 ADC
-    // ========================================================================
-    print_separator("STEP 3: ADS1115 ADC INITIALIZATION");
-    Serial.println("[ADS1115] Initializing 16-bit ADC module...\n");
     
     if (adc_module.begin()) {
         ads_connected = true;
-        Serial.println("[ADS1115] ✓ ADC initialized successfully\n");
-    } else {
-        Serial.println("[ADS1115] ✗ FAILED to initialize ADC!\n");
     }
-    
-    // ========================================================================
-    // Step 4: Initialize BLE
-    // ========================================================================
-    print_separator("STEP 4: BLUETOOTH LOW ENERGY (BLE) INITIALIZATION");
-    Serial.println("[BLE] Initializing Bluetooth Low Energy...\n");
     
     ble_module.begin();
     ble_module.startAdvertising();
     ble_initialized = true;
     
-    Serial.println("\n[BLE] ✓ BLE initialized successfully\n");
-    
-    // ========================================================================
-    // System Ready
-    // ========================================================================
-    print_separator("SYSTEM STATUS");
-    
     system_ready = (ads_connected && oled_connected && ble_initialized);
     
-    Serial.println("[STATUS] I2C Bus:         ✓ READY");
-    Serial.println("[STATUS] OLED Display:    " + String(oled_connected ? "✓" : "✗") + " " + 
-                   String(oled_connected ? "READY" : "OFFLINE"));
-    Serial.println("[STATUS] ADS1115 ADC:    " + String(ads_connected ? "✓" : "✗") + " " + 
-                   String(ads_connected ? "READY" : "OFFLINE"));
-    Serial.println("[STATUS] BLE Module:     ✓ READY");
-    Serial.println("[STATUS] System Status:  " + String(system_ready ? "✓ READY" : "✗ ERRORS DETECTED"));
-    
     if (system_ready) {
-        Serial.println("\n✓ ALL SYSTEMS OPERATIONAL - READY FOR TESTING\n");
-        
+        Serial.println("\n✓ ALL SYSTEMS OPERATIONAL - ACQUISITION STARTING");
         if (oled_connected) {
             oled_display.showStatus(ble_module.isConnected(), ads_connected, 0);
         }
     } else {
-        Serial.println("\n✗ SYSTEM NOT READY - CHECK HARDWARE CONNECTIONS\n");
-        
-        if (oled_connected) {
-            oled_display.showError("INIT FAILED!");
-        }
+        Serial.println("\n✗ SYSTEM NOT READY - Check Hardware");
     }
     
-    print_separator(nullptr);
+    // Add a slight delay before data spam starts
     delay(2000);
+    Serial.println("--- START DATA ---");
 }
 
 // ============================================================================
@@ -208,62 +132,40 @@ void setup() {
 
 void loop() {
     if (!system_ready) {
-        // Blink or display error if system not ready
         delay(1000);
         return;
     }
     
-    // ========================================================================
-    // Read ADC Values
-    // ========================================================================
+    unsigned long current_us = micros();
     
-    if (ads_connected) {
-        int16_t adc_raw = adc_module.readAveraged(ADC_SAMPLES);
-        float adc_voltage = adc_raw * 0.125f;  // Convert to mV
+    // High-speed ADC sampling and structured CSV output
+    if (current_us - last_sample_us >= SAMPLE_INTERVAL_US) {
+        last_sample_us = current_us;
         
-        // Print to serial every iteration
-        Serial.print("[ADC] Raw: ");
-        Serial.print(adc_raw);
-        Serial.print(" | Voltage: ");
-        Serial.print(adc_voltage, 2);
-        Serial.print(" mV | BLE: ");
-        Serial.println(ble_module.getStatusString());
+        if (ads_connected) {
+            int16_t buffer[NUM_CHANNELS];
+            adc_module.readChannels(buffer, NUM_CHANNELS);
+            
+            // Output CSV format: timestamp_ms,ch0,ch1,ch2,ch3
+            Serial.print(millis());
+            for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
+                Serial.print(",");
+                Serial.print(buffer[i]);
+            }
+            Serial.println();
+        }
     }
     
-    // ========================================================================
-    // Update OLED Display (every 500ms)
-    // ========================================================================
-    
-    unsigned long current_time = millis();
-    if (current_time - last_update_time >= 500) {
-        last_update_time = current_time;
-        
+    // Low-speed OLED and BLE updates (every 1 second)
+    unsigned long current_ms = millis();
+    if (current_ms - last_display_ms >= 1000) {
+        last_display_ms = current_ms;
         if (oled_connected && ads_connected) {
-            int16_t adc_raw = adc_module.readValue();
-            oled_display.showStatus(
-                ble_module.isConnected(),
-                ads_connected,
-                adc_raw
-            );
-        }
-        
-        // Print loop counter every update
-        loop_counter++;
-        if (loop_counter % 20 == 0) {  // Every 10 seconds
-            Serial.print("[LOOP] Iterations: ");
-            Serial.print(loop_counter);
-            Serial.print(" | Uptime: ");
-            Serial.print(current_time / 1000);
-            Serial.println(" seconds");
+            oled_display.showStatus(ble_module.isConnected(), ads_connected, 0);
         }
     }
-    
-    // ========================================================================
-    // Main Loop Delay
-    // ========================================================================
-    
-    delay(LOOP_DELAY_MS);
 }
+
 
 // ============================================================================
 // END OF FIRMWARE

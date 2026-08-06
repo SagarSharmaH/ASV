@@ -230,17 +230,17 @@ export function DashboardScreen({ onContinue }: DashboardScreenProps) {
           <Card className="p-4 shadow-sm">
             <div className="flex items-center justify-around">
               <div className="text-center">
-                <p className="text-2xl font-semibold text-foreground">98%</p>
+                <p className="text-2xl font-semibold text-foreground">--</p>
                 <p className="text-xs text-muted-foreground">Accuracy</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-semibold text-foreground">~50ms</p>
+                <p className="text-2xl font-semibold text-foreground">--</p>
                 <p className="text-xs text-muted-foreground">Latency</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-semibold text-foreground">8</p>
+                <p className="text-2xl font-semibold text-foreground">--</p>
                 <p className="text-xs text-muted-foreground">Sensors</p>
               </div>
             </div>

@@ -6,48 +6,21 @@
 /**
  * ADS1115 ADC Module
  * Manages 16-bit I2C ADC for EMG signal acquisition
- * 
- * Pin Configuration:
- * - SDA: GPIO21 (shared with OLED)
- * - SCL: GPIO22 (shared with OLED)
- * - Address: 0x48
- * - Analog Input: A0 (single-ended mode)
  */
 
 #define ADS_ADDR 0x48
-#define ADS_CHANNEL_NUM 0
 
 class ADS1115Module {
 public:
-    /**
-     * Initialize ADS1115
-     * @return true if successful
-     */
     bool begin();
     
-    /**
-     * Read single-ended value from channel 0
-     * @return ADC value (0-32767)
-     */
-    int16_t readValue();
+    // Read single channel
+    int16_t readValue(uint8_t channel = 0);
     
-    /**
-     * Read multiple samples and return average
-     * @param samples Number of samples to average
-     * @return Averaged ADC value
-     */
-    int16_t readAveraged(int samples = 10);
+    // Read multiple channels sequentially
+    void readChannels(int16_t* buffer, uint8_t num_channels = 1);
     
-    /**
-     * Get device status
-     * @return true if device is responding
-     */
     bool isConnected();
-    
-    /**
-     * Get current measurement
-     * @return Formatted measurement string
-     */
     const char* getMeasurementString();
 
 private:
