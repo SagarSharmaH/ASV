@@ -48,10 +48,10 @@ public:
      */
     const char* getStatusString();
 
+    bool connected = false;
 private:
     BLEServer* pServer = nullptr;
     BLECharacteristic* pCharacteristic = nullptr;
-    bool connected = false;
 };
 
 #endif // BLE_TEST_H

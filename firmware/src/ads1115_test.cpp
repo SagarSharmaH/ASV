@@ -14,10 +14,13 @@ bool ADS1115Module::begin() {
     ads.setGain(GAIN_ONE);  // +/- 4.096V range
     ads.setDataRate(RATE_ADS1115_860SPS); // Max speed
     
+    // Start continuous conversion on AIN0 to allow non-blocking reads
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_SINGLE_0, true);
+    
     Serial.println("[ADS1115] Successfully initialized at 0x48");
     Serial.println("[ADS1115] Configuration:");
     Serial.println("         - Gain: +/- 4.096V");
-    Serial.println("         - Rate: 860 SPS");
+    Serial.println("         - Rate: 860 SPS (Continuous Mode)");
     
     return true;
 }
@@ -32,8 +35,15 @@ int16_t ADS1115Module::readValue(uint8_t channel) {
 
 void ADS1115Module::readChannels(int16_t* buffer, uint8_t num_channels) {
     if (!is_initialized) return;
-    for (uint8_t i = 0; i < num_channels && i < 4; i++) {
-        buffer[i] = ads.readADC_SingleEnded(i);
+    
+    if (num_channels == 1) {
+        // Continuous mode is running for ch0, instantly fetch the latest result (non-blocking)
+        buffer[0] = ads.getLastConversionResults();
+    } else {
+        // Fallback for multiple channels (blocking)
+        for (uint8_t i = 0; i < num_channels && i < 4; i++) {
+            buffer[i] = ads.readADC_SingleEnded(i);
+        }
     }
 }
 

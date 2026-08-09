@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 .DS_Store
 datasets/ninapro_db1/
+datasets/custom_silent_speech/
+firmware/.pio/

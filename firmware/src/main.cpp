@@ -45,7 +45,7 @@ BLEModule ble_module;            // BLE module
 
 #define TARGET_SAMPLE_RATE_HZ 500
 #define SAMPLE_INTERVAL_US (1000000 / TARGET_SAMPLE_RATE_HZ)
-#define NUM_CHANNELS 4
+#define NUM_CHANNELS 1  // Currently: AD8232 OUTPUT -> A0 only
 
 // ============================================================================
 // GLOBAL STATE VARIABLES
@@ -58,6 +58,7 @@ bool oled_connected = false;
 
 unsigned long last_sample_us = 0;
 unsigned long last_display_ms = 0;
+unsigned long sample_count = 0;
 
 // ============================================================================
 // SERIAL COMMUNICATION UTILITIES
@@ -87,8 +88,9 @@ void print_system_info() {
 // ============================================================================
 
 void setup() {
-    Serial.begin(115200);
-    delay(1000);
+    // Initialize Serial first for debugging
+    Serial.begin(921600);
+    delay(100);
     
     print_system_info();
     
@@ -153,6 +155,7 @@ void loop() {
                 Serial.print(buffer[i]);
             }
             Serial.println();
+            sample_count++;
         }
     }
     
