@@ -1,197 +1,200 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { ArrowRight, Terminal } from "lucide-react"
 
-export function SplashScreen({ onComplete }: { onComplete: () => void }) {
-  const [showText, setShowText] = useState(false)
+interface SplashScreenProps {
+  onComplete: () => void
+  onNavigate: (screen: "connect" | "detection" | "history", transport?: "ble" | "usb" | "demo") => void
+}
 
+export function SplashScreen({ onComplete, onNavigate }: SplashScreenProps) {
+  const [loading, setLoading] = useState(true)
+  const [progress, setProgress] = useState(0)
+
+  // Tactical Initialising Progress sequence on opening
   useEffect(() => {
-    const textTimer = setTimeout(() => setShowText(true), 500)
-    const completeTimer = setTimeout(onComplete, 3000)
-    return () => {
-      clearTimeout(textTimer)
-      clearTimeout(completeTimer)
-    }
-  }, [onComplete])
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer)
+          setTimeout(() => setLoading(false), 200)
+          return 100
+        }
+        return prev + 10
+      })
+    }, 20)
+    return () => clearInterval(timer)
+  }, [])
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-6">
-      {/* Enhanced Animated Background */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* Soft gradient orbs */}
-        <motion.div
-          className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-primary/10 blur-3xl"
-          animate={{
-            scale: [1, 1.3, 1],
-            opacity: [0.4, 0.6, 0.4],
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute -bottom-32 -right-32 h-80 w-80 rounded-full bg-primary/8 blur-3xl"
-          animate={{
-            scale: [1.2, 1, 1.2],
-            opacity: [0.3, 0.5, 0.3],
-          }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute left-1/4 top-1/4 h-64 w-64 rounded-full bg-primary/5 blur-3xl"
-          animate={{
-            x: [0, 50, 0],
-            y: [0, 30, 0],
-            opacity: [0.2, 0.4, 0.2],
-          }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        />
-        
-        {/* Subtle waveform background lines */}
-        <svg className="absolute bottom-20 left-0 right-0 h-48 opacity-[0.06]" viewBox="0 0 400 100" preserveAspectRatio="none">
-          <motion.path
-            d="M0 50 Q25 20 50 50 T100 50 T150 50 T200 50 T250 50 T300 50 T350 50 T400 50"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            fill="none"
-            className="text-primary"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 3, delay: 0.5 }}
-          />
-          <motion.path
-            d="M0 60 Q25 35 50 60 T100 60 T150 60 T200 60 T250 60 T300 60 T350 60 T400 60"
-            stroke="currentColor"
-            strokeWidth="1"
-            fill="none"
-            className="text-primary"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 3, delay: 0.8 }}
-          />
-          <motion.path
-            d="M0 70 Q25 50 50 70 T100 70 T150 70 T200 70 T250 70 T300 70 T350 70 T400 70"
-            stroke="currentColor"
-            strokeWidth="0.5"
-            fill="none"
-            className="text-primary"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 3, delay: 1.1 }}
-          />
-        </svg>
-        
-        {/* Floating particles */}
-        {[...Array(8)].map((_, i) => (
+    <div className="relative flex h-full w-full flex-col justify-between overflow-hidden bg-transparent text-black">
+      {/* Dedicated Tactical 3D Viewport Loading Screen Overlay */}
+      <AnimatePresence>
+        {loading && (
           <motion.div
-            key={i}
-            className="absolute h-1 w-1 rounded-full bg-primary/30"
-            style={{
-              left: `${10 + i * 12}%`,
-              top: `${15 + (i % 4) * 20}%`,
-            }}
-            animate={{
-              y: [0, -30, 0],
-              opacity: [0.2, 0.6, 0.2],
-              scale: [1, 1.5, 1],
-            }}
-            transition={{
-              duration: 4 + i * 0.5,
-              repeat: Infinity,
-              delay: i * 0.3,
-              ease: "easeInOut",
-            }}
-          />
-        ))}
-        
-        {/* Subtle grid pattern */}
-        <div 
-          className="absolute inset-0 opacity-[0.015]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
-            backgroundSize: '32px 32px'
-          }}
-        />
-      </div>
-
-      {/* Main Content */}
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 flex flex-col items-center"
-      >
-        {/* Logo */}
-        <div className="relative mb-8">
-          <motion.div
-            className="flex h-24 w-24 items-center justify-center rounded-3xl bg-primary shadow-2xl shadow-primary/30"
-            initial={{ rotate: -10 }}
-            animate={{ rotate: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#080a0d] text-white p-6"
           >
-            <span className="text-4xl font-bold tracking-tight text-primary-foreground">
-              ASV
-            </span>
-          </motion.div>
-          
-          {/* Multiple pulse rings */}
-          <motion.div
-            className="absolute -inset-2 rounded-3xl border-2 border-primary/30"
-            initial={{ scale: 1, opacity: 0.5 }}
-            animate={{ scale: 1.3, opacity: 0 }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
-          />
-          <motion.div
-            className="absolute -inset-2 rounded-3xl border border-primary/20"
-            initial={{ scale: 1, opacity: 0.3 }}
-            animate={{ scale: 1.5, opacity: 0 }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut", delay: 0.3 }}
-          />
-        </div>
-
-        {/* Subtitle */}
-        <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: showText ? 1 : 0, y: showText ? 0 : 10 }}
-          transition={{ duration: 0.5 }}
-          className="mb-12 text-lg font-light tracking-widest text-muted-foreground"
-        >
-          A Silent Voice
-        </motion.p>
-
-        {/* Animated waveform */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: showText ? 1 : 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center gap-1"
-        >
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <motion.div
-              key={i}
-              className="w-1 rounded-full bg-primary/60"
-              animate={{
-                height: [6, 24, 6],
-              }}
-              transition={{
-                duration: 1,
-                repeat: Infinity,
-                delay: i * 0.08,
-                ease: "easeInOut",
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: "radial-gradient(ellipse at 50% 50%, transparent 25%, rgba(0,0,0,0.82) 100%)",
               }}
             />
-          ))}
-        </motion.div>
-      </motion.div>
+            <div className="dark-grid" />
 
-      {/* Bottom tagline */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: showText ? 0.6 : 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-        className="absolute bottom-12 text-sm text-muted-foreground"
-      >
-        Empowering silent communication
-      </motion.p>
+            <div className="relative z-10 flex flex-col items-center text-center max-w-xs space-y-5">
+              <h1 className="font-hero text-6xl font-extrabold italic tracking-tight text-white/85">
+                ASV
+              </h1>
+
+              <div className="w-[240px] h-[1px] bg-white/20 relative overflow-hidden">
+                <div
+                  className="h-full bg-white transition-all duration-75"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-mono text-[9px] uppercase tracking-[4px] text-white/80 font-bold">
+                  INITIALISING
+                </p>
+                <p className="font-mono text-[8px] uppercase tracking-[3px] text-white/45">
+                  INA128 · ESP32-S3 · ADS1299 · PCB
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Top Header Bar */}
+      <div className="relative z-10 flex h-[48px] items-center justify-between border-b-2 border-black px-4 bg-white/95 backdrop-blur-sm flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 bg-black animate-liveblink" />
+          <span className="font-hero text-xl font-extrabold italic tracking-tight">ASV</span>
+        </div>
+        <div className="flex items-center gap-1.5 border border-black bg-white px-2 py-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+          <Terminal className="h-3 w-3" />
+          <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-black">
+            SYSTEM ONLINE
+          </span>
+        </div>
+      </div>
+
+      {/* Main Hero Content Body — Compact Non-Scrolling Fit */}
+      <div className="relative z-10 flex flex-1 flex-col justify-between px-4 py-3 overflow-hidden">
+        <div className="space-y-2 flex-shrink-0">
+          {/* Eyebrow Tag */}
+          <div>
+            <span className="tag-badge">
+              — SILENT SPEECH RECOGNITION
+            </span>
+          </div>
+
+          {/* Hero Title SPEC */}
+          <div>
+            <h1 className="font-hero text-5xl font-black text-black leading-[0.92] tracking-[-0.04em]">
+              <span className="block font-extrabold text-black">A Silent</span>
+              <span className="block font-extrabold italic text-black mt-0.5">Voice.</span>
+            </h1>
+          </div>
+
+          {/* Hero Subtitle */}
+          <p className="font-body text-xs sm:text-sm leading-snug text-[#525252] max-w-sm">
+            Transforming non-audible neuromuscular EMG signals from the vocal tract into instant text classification.
+          </p>
+        </div>
+
+        {/* 2x2 Black Stat-Style Grid Layout for 4 Features (Quick Navigation) */}
+        <div className="border-2 border-black bg-black p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] my-3 flex-grow flex flex-col justify-center max-h-[220px]">
+          <div className="grid grid-cols-2 divide-x divide-y divide-white/10 text-white h-full">
+            {/* Box 1: CONNECT */}
+            <div
+              onClick={() => onNavigate("connect")}
+              className="p-4 cursor-pointer hover:bg-white/5 active:bg-white/10 transition-colors flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-mono text-[9px] text-white/55">[ 01 ]</span>
+                <span className="h-1.5 w-1.5 bg-white animate-liveblink" />
+              </div>
+              <div>
+                <p className="font-hero text-2xl font-extrabold text-white">CONNECT</p>
+                <p className="font-mono text-[8px] uppercase tracking-widest text-white/50 mt-0.5">BLE & USB HARDWARE</p>
+              </div>
+            </div>
+
+            {/* Box 2: DETECT */}
+            <div
+              onClick={() => onNavigate("detection", "usb")}
+              className="p-4 cursor-pointer hover:bg-white/5 active:bg-white/10 transition-colors flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-mono text-[9px] text-white/55">[ 02 ]</span>
+              </div>
+              <div>
+                <p className="font-hero text-2xl font-extrabold text-white">DETECT</p>
+                <p className="font-mono text-[8px] uppercase tracking-widest text-white/50 mt-0.5">860 HZ REAL-TIME</p>
+              </div>
+            </div>
+
+            {/* Box 3: REPLAY */}
+            <div
+              onClick={() => onNavigate("detection", "demo")}
+              className="p-4 cursor-pointer hover:bg-white/5 active:bg-white/10 transition-colors flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-mono text-[9px] text-white/55">[ 03 ]</span>
+              </div>
+              <div>
+                <p className="font-hero text-2xl font-extrabold text-white">REPLAY</p>
+                <p className="font-mono text-[8px] uppercase tracking-widest text-white/50 mt-0.5">DEMO STORED CSV</p>
+              </div>
+            </div>
+
+            {/* Box 4: LOGS */}
+            <div
+              onClick={() => onNavigate("history")}
+              className="p-4 cursor-pointer hover:bg-white/5 active:bg-white/10 transition-colors flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-mono text-[9px] text-white/55">[ 04 ]</span>
+              </div>
+              <div>
+                <p className="font-hero text-2xl font-extrabold text-white">LOGS</p>
+                <p className="font-mono text-[8px] uppercase tracking-widest text-white/50 mt-0.5">SESSION HISTORY</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enter System Primary Button */}
+        <div className="mt-1 flex-shrink-0">
+          <button
+            onClick={onComplete}
+            className="btn-primary w-full py-3 text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+          >
+            <span className="flex items-center justify-center gap-2">
+              ENTER SYSTEM INTERFACE
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Footer */}
+      <div className="relative z-10 flex h-[44px] items-center justify-between border-t-2 border-black bg-[#F5F5F5] px-4 flex-shrink-0">
+        <span className="font-hero text-xl font-extrabold italic tracking-tight text-black">
+          ASV
+        </span>
+        <span className="font-mono text-[9px] uppercase tracking-widest text-[#525252]">
+          VER 2.0 · HARDWARE REFINED
+        </span>
+      </div>
     </div>
   )
 }

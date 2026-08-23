@@ -5,8 +5,17 @@
  * refined utterance-level model. Base URL is configurable via
  * NEXT_PUBLIC_ASV_API (default http://127.0.0.1:8000).
  */
-export const ASV_API =
-  process.env.NEXT_PUBLIC_ASV_API?.replace(/\/$/, "") || "http://127.0.0.1:8000"
+const getApiUrl = () => {
+  if (process.env.NEXT_PUBLIC_ASV_API) {
+    return process.env.NEXT_PUBLIC_ASV_API.replace(/\/$/, "")
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`
+  }
+  return "http://127.0.0.1:8000"
+}
+
+export const ASV_API = getApiUrl()
 
 export interface Ranking {
   word: string
