@@ -117,6 +117,35 @@ void OLEDDisplay::showError(const char* error_msg) {
     display.display();
 }
 
+void OLEDDisplay::showPrediction(const char* prediction) {
+    if (!is_initialized) {
+        return;
+    }
+    
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    
+    // Check if calibrating to adjust text size
+    if (strcmp(prediction, "CALIB") == 0) {
+        display.setTextSize(2);
+        display.setCursor(15, 25);
+        display.println("CALIBRATING");
+    } else {
+        // Massive text for HELLO/REST
+        display.setTextSize(3);
+        
+        // Center text roughly
+        if (strcmp(prediction, "HELLO") == 0) {
+            display.setCursor(18, 20);
+        } else {
+            display.setCursor(25, 20);
+        }
+        display.println(prediction);
+    }
+    
+    display.display();
+}
+
 void OLEDDisplay::printAt(int x, int y, const char* text) {
     if (!is_initialized) {
         return;

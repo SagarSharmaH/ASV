@@ -167,7 +167,7 @@ def main():
     parser.add_argument("--reps", type=int, default=20, help="Number of repetitions")
     parser.add_argument("--duration", type=float, default=2.0, help="Recording duration per trial (seconds)")
     parser.add_argument("--port", default=None, help="Serial port (e.g., COM3)")
-    parser.add_argument("--baud", type=int, default=921600, help="Baud rate (default: 921600)")
+    parser.add_argument("--baud", type=int, default=500000, help="Baud rate (default: 500000)")
     parser.add_argument("--channels", type=int, default=None, help="Number of ADC channels (default from settings)")
     parser.add_argument("--rest", type=float, default=3.0, help="Rest between trials (seconds)")
     parser.add_argument("--output", default=str(settings.RAW_DATA_DIR), help="Output base directory")

@@ -7,7 +7,7 @@
  * - ADS1115 16-bit ADC (I2C Address: 0x48)
  * - SSD1306 128x64 OLED Display (I2C Address: 0x3C)
  * - I2C Bus: GPIO21 (SDA), GPIO22 (SCL)
- * - Serial Monitor: 115200 baud
+ * - Serial Monitor: 500000 baud
  * 
  * Features:
  * - I2C device detection and scanning
@@ -60,6 +60,10 @@ unsigned long last_sample_us = 0;
 unsigned long last_display_ms = 0;
 unsigned long sample_count = 0;
 
+// Prediction State for Live Demo
+char current_pred[16] = "WAITING";
+char last_displayed[16] = "";
+
 // ============================================================================
 // SERIAL COMMUNICATION UTILITIES
 // ============================================================================
@@ -89,7 +93,7 @@ void print_system_info() {
 
 void setup() {
     // Initialize Serial first for debugging
-    Serial.begin(921600);
+    Serial.begin(500000);
     delay(100);
     
     print_system_info();
@@ -148,23 +152,30 @@ void loop() {
             int16_t buffer[NUM_CHANNELS];
             adc_module.readChannels(buffer, NUM_CHANNELS);
             
-            // Output CSV format: timestamp_ms,ch0,ch1,ch2,ch3
-            Serial.print(millis());
-            for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
-                Serial.print(",");
-                Serial.print(buffer[i]);
-            }
-            Serial.println();
+            // Output format optimized for Arduino Serial Plotter: EMG:val
+            Serial.print("EMG:");
+            Serial.println(buffer[0]);
             sample_count++;
         }
     }
     
-    // Low-speed OLED and BLE updates (every 1 second)
-    unsigned long current_ms = millis();
-    if (current_ms - last_display_ms >= 1000) {
-        last_display_ms = current_ms;
-        if (oled_connected && ads_connected) {
-            oled_display.showStatus(ble_module.isConnected(), ads_connected, 0);
+    // Non-blocking Serial Listener for PC Predictions
+    while (Serial.available()) {
+        char c = Serial.read();
+        if (c == 'H') {
+            strcpy(current_pred, "HELLO");
+        } else if (c == 'R') {
+            strcpy(current_pred, "REST");
+        } else if (c == 'C') {
+            strcpy(current_pred, "CALIB");
+        }
+    }
+    
+    // Instant OLED Refresh if prediction changed
+    if (strcmp(current_pred, last_displayed) != 0) {
+        strcpy(last_displayed, current_pred);
+        if (oled_connected) {
+            oled_display.showPrediction(current_pred);
         }
     }
 }

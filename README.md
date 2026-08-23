@@ -264,8 +264,8 @@ Edit `firmware/platformio.ini`:
 [env:esp32dev]
 platform = espressif32
 board = esp32doit-devkit1
-monitor_speed = 115200
-upload_speed = 921600
+monitor_speed = 500000
+upload_speed = 500000
 monitor_port = COM3  # Change to your port
 ```
 

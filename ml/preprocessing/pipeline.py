@@ -73,20 +73,27 @@ class ASVPreprocessor:
     # ------------------------------------------------------------------
     # Real-time inference API
     # ------------------------------------------------------------------
-    def process_live_window(self, window_data):
-        """Process a single live window (n_samples, n_channels) → scaled feature vector."""
+    def process_live_window(self, large_window_data):
+        """Process a live window buffer (n_samples, n_channels) → scaled feature vector.
+        To avoid IIR filter edge effects, large_window_data can be up to 2000 samples.
+        Only the final WINDOW_SIZE samples will be passed to feature extraction.
+        """
         if self.scaler is None:
             raise ValueError("Scaler is not fitted or loaded")
 
         filtered = apply_standard_emg_filter(
-            window_data,
+            large_window_data,
             fs=settings.SAMPLING_RATE_HZ,
             notch_freq=settings.NOTCH_FREQ_HZ,
             lowcut=settings.BANDPASS_LOW_HZ,
             highcut=settings.BANDPASS_HIGH_HZ,
         )
+        
+        # Extract only the actual window we want features for
+        actual_window = filtered[-settings.WINDOW_SIZE:]
+        
         features_dict = self.feature_extractor.extract_features_vectorized(
-            filtered, include_frequency=True
+            actual_window, include_frequency=True
         )
         flat, names = self.feature_extractor.flatten_features(features_dict)
 

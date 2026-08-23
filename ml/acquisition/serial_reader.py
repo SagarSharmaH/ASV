@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class EMGSerialReader:
     """Reads structured CSV EMG packets from ESP32 over serial."""
 
-    def __init__(self, port, baud_rate=115200, num_channels=1):
+    def __init__(self, port, baud_rate=500000, num_channels=1):
         self.port = port
         self.baud_rate = baud_rate
         self.num_channels = num_channels
@@ -51,16 +51,42 @@ class EMGSerialReader:
         self.stats["total_lines"] += 1
         try:
             line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line or line.startswith("[") or line.startswith("---") or line.startswith("═") or not line[0].isdigit():
+            if not line or line.startswith("[") or line.startswith("---") or line.startswith("═") or line.startswith("✓") or line.startswith("✗") or line.startswith("ADC:"):
                 # Skip log/debug messages from firmware
                 return None
             
+            # Remove label if present (e.g., "EMG:1024")
+            if ":" in line:
+                line = line.split(":")[-1].strip()
+            
             parts = line.split(",")
             
-            # Legacy format: Just a single ADC value (e.g., "14567")
+            # Legacy format or EMG:val format: Just a single ADC value (e.g., "14567" or "EMG:14567")
             if len(parts) == 1:
-                # Fallback timestamp using PC time
-                timestamp = int(time.time() * 1000)
+                # Generate accurate synthetic timestamp based on PC time and known sample rate
+                # This prevents USB buffering jitter from creating dt=0 and ruining validation.
+                now_ms = int(time.time() * 1000)
+                if getattr(self, '_last_ts', None) is None:
+                    self._last_ts = now_ms
+                    self._sample_idx = 0
+                    
+                # From ml.config import settings
+                from ml.config import settings
+                target_interval = 1000.0 / settings.SAMPLING_RATE_HZ
+                
+                # We anchor the synthetic time to the first received packet, but we allow it to
+                # drift towards PC time if it gets too far off (e.g., due to dropped packets).
+                synthetic_ts = int(self._last_ts + self._sample_idx * target_interval)
+                
+                # If synthetic time drifts more than 50ms from PC time, reset the anchor
+                if abs(now_ms - synthetic_ts) > 50:
+                    self._last_ts = now_ms
+                    self._sample_idx = 0
+                    synthetic_ts = now_ms
+                else:
+                    self._sample_idx += 1
+                
+                timestamp = synthetic_ts
                 channels = [float(parts[0])]
                 
                 if self.num_channels > 1:
@@ -80,7 +106,7 @@ class EMGSerialReader:
                 return None
             self.stats["valid_packets"] += 1
             return timestamp, channels
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, IndexError):
             self.stats["malformed"] += 1
             return None
 

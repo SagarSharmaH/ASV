@@ -46,6 +46,12 @@ public:
     void showError(const char* error_msg);
     
     /**
+     * Display live prediction in massive text
+     * @param prediction The prediction string (e.g. "HELLO", "REST")
+     */
+    void showPrediction(const char* prediction);
+    
+    /**
      * Display custom text at position
      * @param x X coordinate
      * @param y Y coordinate

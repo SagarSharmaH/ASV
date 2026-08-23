@@ -494,7 +494,7 @@ build_flags =
 
 ```ini
 ; Increase upload speed (if stable)
-upload_speed = 921600  ; Default
+upload_speed = 500000  ; Default
 ; Or try: 460800 for slower connections
 ```
 
