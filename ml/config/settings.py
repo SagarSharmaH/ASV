@@ -16,9 +16,21 @@ for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, METADATA_DIR, SPLITS_DIR, MO
     os.makedirs(directory, exist_ok=True)
 
 # Hardware & Acquisition Settings
-SAMPLING_RATE_HZ = 500
-NUM_CHANNELS = 1  # Currently: AD8232 OUTPUT -> ADS1115 A0 only
-SERIAL_BAUD_RATE = 500000
+# ---------------------------------------------------------------------------
+# These MUST match firmware_arduino/ASV_Firmware/asv_config.h.
+# The firmware prints its own values in the "# ASV_STREAM v2 ..." header line
+# at the start of every stream - if the two disagree, trust the firmware and
+# fix this file, because a train/inference sampling-rate mismatch silently
+# destroys model accuracy.
+# ---------------------------------------------------------------------------
+SAMPLING_RATE_HZ = 860        # ADS1115 continuous max, hardware-paced via ALRT/RDY
+SAMPLING_RATE_HZ_FALLBACK = 500  # firmware's software-paced mode (no ALRT wire)
+NUM_CHANNELS = 1              # AD8232 OUTPUT -> ADS1115 A0
+SERIAL_BAUD_RATE = 921600
+TIMESTAMP_UNIT = "us"         # firmware v2 emits microsecond timestamps
+ADC_UV_PER_LSB = 125.0        # gain index 1 = +/-4.096 V full scale
+STREAM_START_CMD = b"s"       # firmware boots IDLE; this starts the CSV stream
+STREAM_STOP_CMD = b"x"
 
 # DSP & Filtering
 NOTCH_FREQ_HZ = 50

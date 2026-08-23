@@ -28,6 +28,19 @@ def validate_trial(csv_path, meta_path=None, expected_rate=None):
         "errors": [],
     }
 
+    # Detect the timestamp unit from the header row. Firmware v2 writes
+    # "timestamp_us"; older recordings wrote "timestamp" (milliseconds).
+    ts_per_second = 1000.0
+    report["timestamp_unit"] = "ms"
+    try:
+        with open(csv_path, "r") as fh:
+            first_col = fh.readline().split(",")[0].strip().lower()
+        if first_col.endswith("_us"):
+            ts_per_second = 1e6
+            report["timestamp_unit"] = "us"
+    except Exception:
+        pass
+
     # Load CSV
     try:
         data = np.loadtxt(csv_path, delimiter=",", skiprows=1)
@@ -81,9 +94,19 @@ def validate_trial(csv_path, meta_path=None, expected_rate=None):
     if len(dt) > 0:
         dt_positive = dt[dt > 0]
         if len(dt_positive) > 0:
-            mean_dt_ms = float(np.mean(dt_positive))
-            actual_rate = 1000.0 / mean_dt_ms if mean_dt_ms > 0 else 0
+            mean_dt = float(np.mean(dt_positive))
+            actual_rate = ts_per_second / mean_dt if mean_dt > 0 else 0
             report["actual_sampling_rate_hz"] = round(actual_rate, 1)
+            # Timing jitter: with the ALRT/RDY interrupt this should be tight.
+            report["dt_std"] = round(float(np.std(dt_positive)), 3)
+            report["dt_max"] = round(float(np.max(dt_positive)), 3)
+            if mean_dt > 0 and float(np.std(dt_positive)) / mean_dt > 0.25:
+                report["warnings"].append(
+                    f"High sampling jitter (dt std/mean = "
+                    f"{np.std(dt_positive) / mean_dt:.2f}). Check the ALRT/RDY wire."
+                )
+                if report["status"] == "GOOD":
+                    report["status"] = "WARNING"
             if expected_rate and abs(actual_rate - expected_rate) / expected_rate > 0.15:
                 report["warnings"].append(
                     f"Sampling rate deviation: expected ~{expected_rate} Hz, got ~{actual_rate:.1f} Hz"
@@ -92,10 +115,10 @@ def validate_trial(csv_path, meta_path=None, expected_rate=None):
                     report["status"] = "WARNING"
 
     # Duration
-    duration_ms = float(timestamps[-1] - timestamps[0])
-    report["duration_sec"] = round(duration_ms / 1000.0, 2)
-    if duration_ms < 500:
-        report["warnings"].append(f"Very short recording: {duration_ms:.0f} ms")
+    duration_sec = float(timestamps[-1] - timestamps[0]) / ts_per_second
+    report["duration_sec"] = round(duration_sec, 2)
+    if duration_sec < 0.5:
+        report["warnings"].append(f"Very short recording: {duration_sec * 1000:.0f} ms")
         if report["status"] == "GOOD":
             report["status"] = "WARNING"
 

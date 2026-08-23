@@ -40,8 +40,12 @@ def save_trial(trial_dir, rep_num, result, subject, label, duration, sampling_ra
     channels = result["channels"]
     n_samples = len(timestamps)
 
-    # Build CSV: timestamp,channel_0[,channel_1,...]
-    header_parts = ["timestamp"] + [f"channel_{i}" for i in range(channels.shape[1] if channels.ndim > 1 else 1)]
+    # Firmware v2 timestamps are microseconds; older builds used milliseconds.
+    ts_unit = result.get("timestamp_unit", "us")
+    per_second = 1e6 if ts_unit == "us" else 1e3
+
+    # Build CSV: timestamp_us,channel_0[,channel_1,...]
+    header_parts = [f"timestamp_{ts_unit}"] + [f"channel_{i}" for i in range(channels.shape[1] if channels.ndim > 1 else 1)]
     header = ",".join(header_parts)
 
     if channels.ndim == 1:
@@ -51,10 +55,19 @@ def save_trial(trial_dir, rep_num, result, subject, label, duration, sampling_ra
     data = np.column_stack([timestamps, channels])
     np.savetxt(csv_path, data, delimiter=",", header=header, comments="", fmt=fmt)
 
-    # Compute actual sampling rate
+    # Compute actual sampling rate and timing jitter
+    jitter = {}
     if n_samples >= 2:
-        dt_ms = np.diff(timestamps.astype(float))
-        actual_rate = 1000.0 / np.mean(dt_ms) if np.mean(dt_ms) > 0 else 0
+        dt = np.diff(timestamps.astype(float))
+        mean_dt = float(np.mean(dt))
+        actual_rate = per_second / mean_dt if mean_dt > 0 else 0
+        jitter = {
+            "dt_mean": round(mean_dt, 3),
+            "dt_std": round(float(np.std(dt)), 3),
+            "dt_min": round(float(np.min(dt)), 3),
+            "dt_max": round(float(np.max(dt)), 3),
+            "unit": ts_unit,
+        }
     else:
         actual_rate = 0
 
@@ -68,6 +81,9 @@ def save_trial(trial_dir, rep_num, result, subject, label, duration, sampling_ra
         "configured_sampling_rate_hz": sampling_rate,
         "actual_sampling_rate_hz": round(actual_rate, 2),
         "num_channels": num_channels,
+        "timestamp_unit": ts_unit,
+        "timing_jitter": jitter,
+        "firmware_header": result.get("firmware_header", {}),
         "is_simulated": result.get("is_simulated", False),
         "serial_stats": result.get("stats", {}),
         "source": "collect_emg.py",
@@ -142,8 +158,24 @@ def run_collection(args):
                 subject, label, duration,
                 settings.SAMPLING_RATE_HZ, num_channels,
             )
-            print(f"  Saved: {csv_path.name} ({n} samples, "
+            actual = meta.get("actual_sampling_rate_hz", 0)
+            print(f"  Saved: {csv_path.name} ({n} samples @ {actual} Hz, "
                   f"{stats.get('malformed', 0)} malformed packets)")
+
+            # Guard against the silent killer: a train/inference rate mismatch.
+            expected = settings.SAMPLING_RATE_HZ
+            if n == 0:
+                logger.error(
+                    "NO SAMPLES RECEIVED. The firmware boots IDLE - check that "
+                    "the serial handshake ('s') succeeded, and that the self-test "
+                    "passes in the Arduino Serial Monitor."
+                )
+            elif actual and abs(actual - expected) / expected > 0.10:
+                logger.warning(
+                    f"Sampling rate {actual} Hz differs from settings.SAMPLING_RATE_HZ "
+                    f"({expected} Hz) by more than 10%. Fix ml/config/settings.py to "
+                    f"match the firmware BEFORE collecting the rest of the dataset."
+                )
 
             if rep < reps:
                 print(f"  Rest for {rest}s...")
@@ -167,7 +199,7 @@ def main():
     parser.add_argument("--reps", type=int, default=20, help="Number of repetitions")
     parser.add_argument("--duration", type=float, default=2.0, help="Recording duration per trial (seconds)")
     parser.add_argument("--port", default=None, help="Serial port (e.g., COM3)")
-    parser.add_argument("--baud", type=int, default=500000, help="Baud rate (default: 500000)")
+    parser.add_argument("--baud", type=int, default=921600, help="Baud rate (default: 921600)")
     parser.add_argument("--channels", type=int, default=None, help="Number of ADC channels (default from settings)")
     parser.add_argument("--rest", type=float, default=3.0, help="Rest between trials (seconds)")
     parser.add_argument("--output", default=str(settings.RAW_DATA_DIR), help="Output base directory")
