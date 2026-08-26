@@ -1,17 +1,17 @@
 # ASV — Refined model (utterance-level)
 
-**Trained:** 20260811_093423 · **Model:** SVM_rbf · **Subject(s):** YOU
+**Trained:** 20260826_213705 · **Model:** ExtraTrees · **Subject(s):** S01
 
 ## What this is
-A silent-speech classifier for the vocabulary: **hello, help, no, rest, yes**.
+A silent-speech classifier for the vocabulary: **help, hi, no, rest, yes**.
 Unlike the original per-window model, this treats **one recording = one word = one
 sample** and describes the whole utterance (energy + envelope shape + spectrum).
 
 ## Honest accuracy (out-of-fold — no leakage)
 | Metric | Value |
 |---|---|
-| Leave-One-Recording-Out accuracy | **54.3%** |
-| Repeated 5-fold ×10 | 61.4% ± 16.2% |
+| Leave-One-Recording-Out accuracy | **66.4%** |
+| Repeated 5-fold ×10 | 66.4% ± 5.2% |
 | Chance level (5 classes) | 20% |
 
 Every number above is measured on recordings the model did **not** train on.

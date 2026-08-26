@@ -1,10 +1,10 @@
 {
-  "model_type": "SVM_rbf",
+  "model_type": "ExtraTrees",
   "approach": "utterance-level (1 recording = 1 sample)",
-  "training_timestamp": "20260811_093423",
+  "training_timestamp": "20260826_213705",
   "labels": [
-    "hello",
     "help",
+    "hi",
     "no",
     "rest",
     "yes"
@@ -36,9 +36,9 @@
     "rise_fall_ratio"
   ],
   "n_features": 23,
-  "n_recordings": 35,
+  "n_recordings": 250,
   "subjects": [
-    "YOU"
+    "S01"
   ],
   "single_subject": true,
   "scope_note": "Validated same-subject/same-session (leave-one-recording-out). Re-applying electrodes or a new subject requires re-recording/recalibration."
