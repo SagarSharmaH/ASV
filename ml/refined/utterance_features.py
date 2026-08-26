@@ -33,13 +33,19 @@ UV_PER_LSB = 125.0          # gain index 1: +/-4.096 V
 BASELINE_TARGET_MV = 1635.0     # mid-supply (Vcc/2) at gain index 1
 BASELINE_TOLERANCE_MV = 700.0   # outside [935, 2335] mV -> railed / DC-offset fault
 MIN_HEALTHY_PP_MV = 3.0         # below this over ~1s -> flat / electrode not making contact
+# Upper bound added after the 2026-08-23/26 mains-hum fault. A baseline check alone
+# missed it: 50 Hz common-mode drove the AD8232 rail-to-rail while the *mean* stayed
+# inside tolerance, so 3 of 5 known-bad recordings passed as OK. Measured separation
+# on real data is clean -- the good S01 batch peaks at 498 mV pp, the hum-saturated
+# batch starts at 855 mV -- so 700 mV sits in the gap with headroom on both sides.
+MAX_HEALTHY_PP_MV = 700.0
 
 
 def signal_health(counts, uv_per_lsb=UV_PER_LSB):
     """Cheap pre-flight check on raw ADC counts: is this electrode contact usable?
 
     Returns dict(baseline_mv, pp_mv, status, ok). status is one of
-    NO_DATA / RAILED_OR_OFFSET / FLAT / OK.
+    NO_DATA / RAILED_OR_OFFSET / FLAT / SATURATED_OR_HUM / OK.
     """
     counts = np.asarray(counts, dtype=float)
     if counts.size == 0:
@@ -51,6 +57,9 @@ def signal_health(counts, uv_per_lsb=UV_PER_LSB):
         status = "RAILED_OR_OFFSET"
     elif pp < MIN_HEALTHY_PP_MV:
         status = "FLAT"
+    elif pp > MAX_HEALTHY_PP_MV:
+        # Almost always 50 Hz mains pickup. Confirm with tools/check_interference.py.
+        status = "SATURATED_OR_HUM"
     else:
         status = "OK"
     return {"baseline_mv": round(baseline, 1), "pp_mv": round(pp, 2),
@@ -97,7 +106,9 @@ def _envelope(xf, fs, cutoff=8.0):
 def preprocess(counts, fs=FS_DEFAULT):
     """Raw ADC counts -> (filtered mV signal, envelope). DC removed."""
     x = (np.asarray(counts, dtype=float) - np.mean(counts)) * UV_PER_LSB / 1000.0
-    xf = _bandpass(_notch(x, fs), fs)
+    x_n = _notch(x, fs, f0=50.0, q=20.0)
+    x_n = _notch(x_n, fs, f0=100.0, q=20.0)
+    xf = _bandpass(x_n, fs, lo=15.0, hi=180.0, order=4)
     env = _envelope(xf, fs)
     return xf, env
 

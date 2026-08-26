@@ -17,9 +17,9 @@ Usage:
     python ml/refined/train_refined.py --data-dir datasets/custom_silent_speech/raw --out refined_model
 """
 from __future__ import annotations
-import os, sys, glob, json, argparse, shutil, warnings
-from pathlib import Path
+import os, sys, glob, json, argparse, shutil, warnings, re
 from datetime import datetime
+from pathlib import Path
 
 warnings.filterwarnings("ignore")  # silence sklearn FutureWarnings for a clean deliverable
 
@@ -28,10 +28,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from sklearn.base import clone
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.pipeline import make_pipeline
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import (
     LeaveOneOut, cross_val_predict, cross_val_score, RepeatedStratifiedKFold,
@@ -62,14 +63,39 @@ def discover(data_dir):
     return np.array(X), np.array(y), np.array(subjects), files, raws
 
 
+def session_labels(files, gap_minutes=15):
+    """Group recordings into electrode sessions from their filename timestamps.
+
+    A session is one donning. `collect_emg.py` names files rep###_YYYYmmdd_HHMMSS,
+    so consecutive recordings more than `gap_minutes` apart mean the electrodes
+    came off in between. Same rule as tools/session_eval.py -- keep them in step.
+    Returns an array of single-letter labels aligned with `files`.
+    """
+    stamps = []
+    for name in files:
+        m = re.search(r"(\d{8}_\d{6})", name)
+        stamps.append(datetime.strptime(m.group(1), "%Y%m%d_%H%M%S") if m else datetime.min)
+    order = np.argsort(stamps)
+    out = np.empty(len(files), dtype=object)
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    cur = 0
+    for i, idx in enumerate(order):
+        if i > 0 and (stamps[idx] - stamps[order[i - 1]]).total_seconds() / 60.0 > gap_minutes:
+            cur += 1
+        out[idx] = letters[cur % len(letters)]
+    return out
+
+
 def candidate_models():
     return {
-        "SVM_rbf":  make_pipeline(StandardScaler(), SVC(kernel="rbf", C=20, gamma="scale",
-                                                        probability=True, random_state=RANDOM_STATE)),
-        "LDA":      make_pipeline(StandardScaler(), LinearDiscriminantAnalysis()),
-        "RandomForest": RandomForestClassifier(n_estimators=600, max_depth=None,
-                                               min_samples_leaf=1,
-                                               random_state=RANDOM_STATE),
+        "LDA":           make_pipeline(StandardScaler(), LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")),
+        "SVM_linear":    make_pipeline(StandardScaler(), SVC(kernel="linear", C=0.2, probability=True, random_state=RANDOM_STATE)),
+        "SVM_rbf":       make_pipeline(StandardScaler(), SVC(kernel="rbf", C=2.0, gamma="scale", probability=True, random_state=RANDOM_STATE)),
+        "RandomForest":  RandomForestClassifier(n_estimators=300, max_depth=6, random_state=RANDOM_STATE),
+        # Added 2026-08-26. Measured best out-of-session on the 250-recording set
+        # (67.0% vs 63.5% for SVM_rbf), which is the number that actually matters
+        # here -- see tools/session_eval.py.
+        "ExtraTrees":    ExtraTreesClassifier(n_estimators=500, random_state=RANDOM_STATE),
     }
 
 
@@ -98,20 +124,49 @@ def main():
     print("[2/5] Evaluating (Leave-One-Recording-Out + Repeated 5-fold)")
     results = {}
     rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=10, random_state=RANDOM_STATE)
+    # Out-of-session folds, when the dataset has enough sessions to form them.
+    # This is the metric worth optimising: pooled LOO leaves same-session
+    # recordings of the held-out word in training, so it rewards a model for
+    # recognising the donning rather than the word. Selecting on it picked
+    # SVM_rbf over ExtraTrees on 2026-08-26 even though ExtraTrees was 3.5
+    # points better on an unseen donning.
+    sess = session_labels(files)
+    all_words = set(y.tolist())
+    fold_sessions = [s for s in sorted(set(sess)) if set(y[sess == s].tolist()) == all_words]
+    if fold_sessions:
+        print(f"      out-of-session folds available: {', '.join(fold_sessions)}")
+    else:
+        print("      no session contains every word -- falling back to pooled LOO for selection")
+
     for name, model in candidate_models().items():
         loo_pred = cross_val_predict(model, X, yi, cv=LeaveOneOut())
         loo_acc = accuracy_score(yi, loo_pred)
         rk = cross_val_score(model, X, yi, cv=rskf)
+
+        oos = None
+        if fold_sessions:
+            accs = []
+            for s in fold_sessions:
+                te = sess == s
+                accs.append(accuracy_score(yi[te], clone(model).fit(X[~te], yi[~te]).predict(X[te])))
+            oos = float(np.mean(accs))
+
         results[name] = {
             "loo_accuracy": round(float(loo_acc), 4),
             "repeated5fold_mean": round(float(rk.mean()), 4),
             "repeated5fold_std": round(float(rk.std()), 4),
+            "out_of_session": round(oos, 4) if oos is not None else None,
             "_loo_pred": loo_pred,
         }
-        print(f"      {name:13s} LOO={loo_acc:.3f}  5fold={rk.mean():.3f}±{rk.std():.3f}")
+        extra = f"  out-of-session={oos:.3f}" if oos is not None else ""
+        print(f"      {name:13s} LOO={loo_acc:.3f}  5fold={rk.mean():.3f}±{rk.std():.3f}{extra}")
 
-    best = max(results, key=lambda k: (results[k]["loo_accuracy"], results[k]["repeated5fold_mean"]))
-    print(f"      -> best: {best}")
+    if fold_sessions:
+        best = max(results, key=lambda k: (results[k]["out_of_session"], results[k]["loo_accuracy"]))
+        print(f"      -> best by out-of-session: {best}")
+    else:
+        best = max(results, key=lambda k: (results[k]["loo_accuracy"], results[k]["repeated5fold_mean"]))
+        print(f"      -> best by pooled LOO: {best}")
 
     # ---- honest confusion matrix from best model's LOO out-of-fold predictions ----
     loo_pred = results[best].pop("_loo_pred")

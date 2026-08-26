@@ -5,6 +5,7 @@ Usage:
     python ml/acquisition/collect_emg.py --subject S01 --label hello --reps 5 --simulate
 """
 import os
+import re
 import sys
 import json
 import time
@@ -109,10 +110,20 @@ def run_collection(args):
     trial_dir = Path(args.output) / subject / label
     trial_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check for existing reps to avoid overwriting
-    existing = list(trial_dir.glob("rep*.csv"))
+    # Continue numbering from whatever is already there. Filenames carry a
+    # timestamp so nothing was ever overwritten, but restarting at rep001 on an
+    # "add more reps" run produced two sets of rep001..rep010 in one folder,
+    # which makes the dataset impossible to talk about. Parse the highest
+    # existing index and carry on from there.
+    existing = sorted(trial_dir.glob("rep*.csv"))
+    rep_start = 1
     if existing:
-        logger.info(f"Found {len(existing)} existing recordings in {trial_dir}")
+        indices = [int(m.group(1)) for m in
+                   (re.match(r"rep(\d+)_", f.name) for f in existing) if m]
+        if indices:
+            rep_start = max(indices) + 1
+        logger.info(f"Found {len(existing)} existing recordings in {trial_dir}; "
+                    f"continuing at rep{rep_start:03d}")
 
     reader = EMGSerialReader(args.port, baud_rate=baud, num_channels=num_channels)
 
@@ -144,8 +155,8 @@ def run_collection(args):
     print(f"{'='*50}\n")
 
     try:
-        for rep in range(1, reps + 1):
-            print(f"\n--- Trial {rep}/{reps}: '{label}' ---")
+        for n_done, rep in enumerate(range(rep_start, rep_start + reps), start=1):
+            print(f"\n--- Trial {n_done}/{reps} (rep{rep:03d}): '{label}' ---")
             countdown(3, "Prepare in ")
             print("  >>> RECORDING — articulate now! <<<", flush=True)
 
@@ -197,7 +208,7 @@ def main():
     parser.add_argument("--subject", required=True, help="Subject ID (e.g., S01)")
     parser.add_argument("--label", required=True, help="Word label (e.g., hello, yes)")
     parser.add_argument("--reps", type=int, default=20, help="Number of repetitions")
-    parser.add_argument("--duration", type=float, default=2.0, help="Recording duration per trial (seconds)")
+    parser.add_argument("--duration", type=float, default=2.5, help="Recording duration per trial (seconds)")
     parser.add_argument("--port", default=None, help="Serial port (e.g., COM3)")
     parser.add_argument("--baud", type=int, default=921600, help="Baud rate (default: 921600)")
     parser.add_argument("--channels", type=int, default=None, help="Number of ADC channels (default from settings)")

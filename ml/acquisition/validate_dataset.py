@@ -18,6 +18,12 @@ from ml.config import settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# Windows consoles default to cp1252, which cannot encode the status glyphs used
+# in print_report(). That raised UnicodeEncodeError *before* the JSON report was
+# written, silently leaving a stale validation_report.json on disk.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def validate_trial(csv_path, meta_path=None, expected_rate=None):
     """Validate a single trial recording. Returns a quality report dict."""
