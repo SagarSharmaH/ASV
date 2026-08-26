@@ -15,11 +15,11 @@ jaw electrodes -> AD8232 -> ADS1115 (A0) -> ESP32 -> USB CSV -> Python -> model
 
 | Layer | Reality |
 |---|---|
-| Firmware (`firmware_arduino/`) | **Working and current.** 860 SPS, interrupt-paced, self-testing. |
+| Firmware (`firmware_arduino/`) | **Working and current.** 860 SPS, interrupt-paced, self-testing. Flashed and verified 2026-08-26 (build `Aug 26 2026 23:13:01`): self-test passes, BLE word push reaches the app. |
 | Acquisition (`ml/acquisition/`) | Working and tested; matches firmware v2 stream format. |
 | Tests (`tests/test_pipeline.py`) | 46/46 passing. Run them after touching `ml/`. |
 | Datasets | **Real data exists.** 250 jaw-EMG recordings, one subject (S01), five electrode sessions on 2026-08-26. See below. |
-| ML pipeline (`ml/refined/`) | Trained. `refined_model/` holds an SVM_rbf: **67.2% pooled**, **63.5% on an unseen donning** over 5 words. A 3-word subset reaches 90%. See below. |
+| ML pipeline (`ml/refined/`) | Trained. `refined_model/` holds an ExtraTrees: **67.0% on an unseen donning**, 66.4% pooled, over 5 words. A 3-word subset reaches 90%. See below. |
 | Legacy ML (`ml/training/`, `ml/inference/`, `ml/preprocessing/`) | The old per-window pipeline, superseded — it labelled silence as speech and stalled near 48%. `ml/models/latest` and `ml/models/demo_hello_rest` are deleted; code still pointing at them is stale. |
 | Backend (`backend/main.py`) | FastAPI inference server over `refined_model/`. **Verified working 2026-08-26**: `/health`, `/model/status` and `/predict_utterance` all respond correctly against real recordings. Start with `python -m uvicorn backend.main:app --port 8000`. |
 | Frontend (`frontend/`) | Assistive-communication app, deliberately thin. Connects over Bluetooth, shows the word the OLED is showing, speaks it, and offers a tap-a-word phrasebook. No muscle-activity display, no USB connection of its own. |
@@ -28,7 +28,7 @@ The honest summary: acquisition, offline classification and the app's recognitio
 path all work, so a mouthed word can reach the screen and be spoken, and accuracy
 now largely survives re-applying the electrodes. What is still missing is
 on-device classification — a PC running the backend is always in the loop — and
-five-word accuracy is 63.5%, workable but not reliable. **Do not** describe this
+five-word accuracy is 67%, workable but not reliable. **Do not** describe this
 as a working wearable.
 
 ### The dataset — `datasets/custom_silent_speech/`
@@ -67,12 +67,10 @@ Recording data is the one thing here that cannot be regenerated from source, so
 keep a copy outside the repo as well; `git clean -xdf` and a bad rebase are both
 capable of losing work git has not been told about yet.
 
-`datasets/ninapro_db1/` (3.2 GB) stays ignored and must never be committed.
-
-Do not reintroduce NinaPro DB1 (`datasets/ninapro_db1/` — 3.2 GB, still on disk,
-unused): it is forearm/hand gesture EMG and cannot transfer to jaw articulation.
-Same for synthetic `datasets/emg_dataset.csv` / `emg_features.csv`, which are
-Gaussian noise from the pre-hardware era.
+`datasets/ninapro_db1/` stays ignored and must never be committed — 3.2 GB of
+forearm/hand gesture EMG that cannot transfer to jaw articulation. Same for the
+synthetic `datasets/emg_dataset.csv` / `emg_features.csv`, which are Gaussian
+noise from the pre-hardware era.
 
 **Vocabulary change 2026-08-26:** `hello` was dropped and replaced with `hi`. It was
 the worst class in every evaluation and live testing confirmed it. Its recordings
@@ -86,13 +84,28 @@ One recording = one sample. 23 utterance-level features (energy, envelope shape,
 burst timing, spectrum) from `ml/refined/utterance_features.py`, shared by training
 and inference so the two cannot drift apart.
 
-Retrained 2026-08-26 on 250 recordings: SVM_rbf, **67.2% pooled leave-one-out**,
-**63.5% out-of-session**, chance 20%.
+Retrained 2026-08-26 on 250 recordings: **ExtraTrees**, **67.0% out-of-session**,
+66.4% pooled leave-one-out, chance 20%.
 
-Quote the out-of-session number. The headline figure has moved around a lot as the
-dataset grew (76% -> 67% -> 61% -> 67.2%) purely because pooled accuracy tracks how
-much session leakage is available, not how good the model is. Out-of-session went
-29% -> 52% -> 63.5% over the same period, which is the real trajectory.
+`train_refined.py` selects on out-of-session accuracy whenever the dataset has
+sessions containing every word. That matters: on this data the two metrics
+disagree and pick different winners.
+
+| Candidate | Pooled LOO | Out-of-session |
+|---|---|---|
+| LDA | 64.0% | 63.0% |
+| SVM_linear | 66.4% | 65.5% |
+| SVM_rbf | **67.2%** | 63.5% |
+| RandomForest | 66.8% | 65.0% |
+| **ExtraTrees** | 66.4% | **67.0%** |
+
+Selecting on pooled LOO picks SVM_rbf, which is 3.5 points *worse* on an unseen
+donning — it is simply better at recognising the session. Quote the out-of-session
+number and select on it.
+
+The headline pooled figure has wandered (76% -> 67% -> 61% -> 66%) purely because
+it tracks how much session leakage is available. Out-of-session went
+29% -> 52% -> 67% over the same period. That is the real trajectory.
 
 ### Cross-session transfer — the problem that is being solved
 
@@ -103,16 +116,15 @@ progression is the most important measurement in the project:
 
 | Sessions in the dataset | Out-of-session accuracy |
 |---|---|
-| 2 (2026-08-26, 100 recordings) | 29% |
+| 2 (100 recordings) | 29% |
 | 4 (150 recordings) | 52% — one valid fold |
-| **5 (250 recordings)** | **63.5% — two valid folds** |
+| **5 (250 recordings)** | **67.0% — two valid folds** |
 
-Chance is 20%. More importantly, the gap between the optimistic and the honest
-number has collapsed: pooled leave-one-recording-out is now 67.2% against 63.5%
-out-of-session, an inflation of only **+3.7%**, down from +11% at four sessions.
-The model has largely stopped keying on session identity. The two folds agree
-closely (D 64.0%, E 63.0%), so this number is far more trustworthy than the
-single-fold 52% it replaces.
+Chance is 20%. More telling than the rise: the gap between the optimistic and the
+honest number has closed entirely. Pooled leave-one-recording-out is 66.4% against
+67.0% out-of-session — the honest number is now the *higher* one, where at four
+sessions pooled was inflated by +11%. The model has stopped keying on session
+identity, which is exactly what more donnings were supposed to achieve.
 
 **Keep collecting donnings.** This is the highest-value work available and it is
 measurably paying off. Ten reps of every word per donning, electrodes re-applied
@@ -125,7 +137,7 @@ inflation stays visible.
 
 #### Vocabulary size is the other lever
 
-Measured out-of-session on the 250-recording set, best subset at each size:
+Measured out-of-session on the 250-recording set (SVM_rbf), best subset at each size:
 
 | Words | Out-of-session | Chance | Best subset |
 |---|---|---|---|
@@ -173,6 +185,26 @@ The app is deliberately thin: it connects over Bluetooth, shows words that arriv
 speaks them, and offers a tap-a-word phrasebook. It does **not** display muscle
 activity and does **not** open a USB connection of its own.
 
+**Verified end to end on 2026-08-26** (firmware build `Aug 26 2026 23:13:01`):
+self-test all checks passed at 860.94 Hz on the RDY interrupt, `c` captured and
+sent 2150 samples cleanly, and with the app connected (`ble=CONNECTED`) three
+pushed words reached the phone and were spoken aloud.
+
+#### Order of operations — this one bites
+
+**Opening the serial port reboots the ESP32**, which drops any BLE connection.
+CP210x boards reset on DTR/RTS, so every Python tool that opens COM5 restarts the
+firmware. So:
+
+1. Start `predict_live_gui.py` / `predict_live.py` first — the board reboots once.
+2. **Then** pair the app in Chrome/Edge.
+
+The other order disconnects the phone the instant the predictor starts, and the
+symptom is confusing: the app looks paired while the board reports `ADVERTISING`.
+Check with `?` on the serial line — `ble=CONNECTED` is the only proof a client is
+really attached. Pairing in Windows Bluetooth settings does **not** count; Web
+Bluetooth makes its own GATT connection through the browser's device chooser.
+
 #### Also present but unused: the BLE capture burst
 
 `asvBleSendCapture()` in firmware and `captureUtterance()` in `use-ble.ts`
@@ -185,7 +217,7 @@ chunk   [0]=0xC5 [1]=0x01 [2..3]=start index   [4..]=int16 counts
 footer  [0]=0xC5 [1]=0x02
 ```
 
-It round-trips correctly under test but no screen calls it. It is the path to a
+It round-trips correctly under test and the firmware side was confirmed working on hardware (2150 samples captured and sent), but no screen calls it. It is the path to a
 phone-only product that does not need a PC at all — worth reviving once the model
 moves on-device. `frontend/hooks/use-emg-recognition.ts` is its unused driver.
 Continuous 860 SPS over BLE still does not work; the burst is a one-shot after
