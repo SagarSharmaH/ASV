@@ -181,6 +181,7 @@ The firmware runs a full self-test automatically at boot and then waits for comm
 | `g` | cycle ADC gain |
 | `o` | toggle OLED |
 | `r` | reset counters |
+| `w` | send a test word over BLE (checks the app's display + speech path) |
 | `?` | one-line status |
 
 ### Step 1 — devices are on the bus

@@ -4,7 +4,10 @@
     {
       "name": "asv-frontend",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "pushd \"C:\\Users\\Asus\\Downloads\\ASV-main\\ASV-main\\frontend\" && npm run dev"],
+      "runtimeArgs": [
+        "/c",
+        "set PATH=C:\\Program Files\\nodejs;%PATH% && npm --prefix C:\\Users\\sagar\\ASV\\frontend run dev"
+      ],
       "port": 3000
     }
   ]

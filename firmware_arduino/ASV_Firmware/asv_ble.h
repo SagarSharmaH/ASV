@@ -28,6 +28,12 @@ struct AsvBleStatus {
 
 void  asvBleBegin();
 void  asvBleNotify(const AsvBleStatus &s);
+// Push a recognised word to the app so it can be shown and spoken aloud.
+// confidence is 0-100; word is truncated to ASV_BLE_WORD_MAXLEN so the packet
+// stays inside a single notification. No classifier runs on the ESP32 yet, so
+// nothing calls this during normal operation - it is the channel the model will
+// publish through, and 'w' on the serial menu exercises it end to end.
+void  asvBleNotifyWord(const char *word, uint8_t confidence);
 bool  asvBleConnected();
 const char *asvBleStateName();
 // Returns and clears the last single-byte command written by a BLE client

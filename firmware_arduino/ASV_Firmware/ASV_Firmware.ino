@@ -203,6 +203,19 @@ static void handleCommand(char c) {
       Serial.println(F("[STATS] counters reset"));
       break;
 
+    case 'w': case 'W': {
+      // Fires a word up the BLE word channel so the app's display + speech path
+      // can be verified without a trained classifier. Cycles the vocabulary.
+      static const char *kWords[] = { "hello", "yes", "no", "help", "rest" };
+      static uint8_t idx = 0;
+      const char *w = kWords[idx];
+      idx = (idx + 1) % 5;
+      asvBleNotifyWord(w, 88);
+      Serial.print(F("[BLE] word -> "));
+      Serial.println(w);
+      break;
+    }
+
     case '?': printStatusLine(); break;
 
     default: break;   // ignore CR/LF and stray bytes

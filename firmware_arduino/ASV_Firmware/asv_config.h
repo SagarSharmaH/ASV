@@ -88,4 +88,7 @@
 #define ASV_BLE_SERVICE_UUID  "6e6b0001-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_STATUS_UUID   "6e6b0002-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_CMD_UUID      "6e6b0003-b5a3-f393-e0a9-e50e24dcca9e"
+#define ASV_BLE_WORD_UUID     "6e6b0004-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_NOTIFY_MS   50         // 20 Hz status/preview packets
+#define ASV_BLE_WORD_MAXLEN 16         // word packet is 3 header bytes + text,
+                                       // and must fit one 20-byte notification

@@ -22,6 +22,7 @@ static uint8_t kCccdInit[2] = { 0x00, 0x00 };
 static BLEServer         *g_server  = nullptr;
 static BLECharacteristic *g_status  = nullptr;
 static BLECharacteristic *g_cmd     = nullptr;
+static BLECharacteristic *g_word    = nullptr;
 static volatile bool      g_connected = false;
 static volatile char      g_pendingCmd = 0;
 
@@ -74,6 +75,15 @@ void asvBleBegin() {
       ASV_BLE_CMD_UUID,
       BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
   g_cmd->setCallbacks(&g_cmdCb);
+
+  g_word = svc->createCharacteristic(
+      ASV_BLE_WORD_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  if (g_word->getDescriptorByUUID(BLEUUID(kCccdUuid)) == nullptr) {
+    BLEDescriptor *cccd = new BLEDescriptor(BLEUUID(kCccdUuid));
+    cccd->setValue(kCccdInit, sizeof(kCccdInit));
+    g_word->addDescriptor(cccd);
+  }
 
   svc->start();
 
@@ -128,6 +138,23 @@ void asvBleNotify(const AsvBleStatus &s) {
   g_status->notify();
 }
 
+void asvBleNotifyWord(const char *word, uint8_t confidence) {
+  if (!g_word || !g_connected || !word) return;
+
+  uint8_t n = 0;
+  while (word[n] && n < ASV_BLE_WORD_MAXLEN) n++;
+  if (n == 0) return;
+
+  uint8_t pkt[3 + ASV_BLE_WORD_MAXLEN];
+  pkt[0] = 0xC3;                                    // magic
+  pkt[1] = confidence > 100 ? 100 : confidence;
+  pkt[2] = n;
+  for (uint8_t i = 0; i < n; i++) pkt[3 + i] = (uint8_t)word[i];
+
+  g_word->setValue(pkt, (size_t)(3 + n));
+  g_word->notify();
+}
+
 bool asvBleConnected() { return g_connected; }
 
 const char *asvBleStateName() { return g_connected ? "CONNECTED" : "ADVERTISING"; }
@@ -142,6 +169,7 @@ char asvBleTakeCommand() {
 
 void asvBleBegin() {}
 void asvBleNotify(const AsvBleStatus &) {}
+void asvBleNotifyWord(const char *, uint8_t) {}
 bool asvBleConnected() { return false; }
 const char *asvBleStateName() { return "DISABLED"; }
 char asvBleTakeCommand() { return 0; }

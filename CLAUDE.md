@@ -21,7 +21,7 @@ jaw electrodes -> AD8232 -> ADS1115 (A0) -> ESP32 -> USB CSV -> Python -> model
 | Datasets | **Empty.** No valid recordings exist yet. |
 | ML pipeline (`ml/`) | Code exists, has never produced a trained model. `ml/models/` is empty. |
 | Backend (`backend/main.py`) | FastAPI inference server, code complete, **never run** — no model to serve. |
-| Frontend (`frontend/`) | Polished UI, **100% simulated** — mock BLE, `Math.random()` waveforms, hardcoded words. |
+| Frontend (`frontend/`) | Assistive-communication app. Web Bluetooth and text-to-speech are **real**. The recognised-word feed is not — no model exists, so words come from taps or the firmware's `w` test command. |
 
 **Do not** describe this project as working end-to-end. It is at the "getting real
 signal off the hardware" stage.
@@ -113,13 +113,30 @@ python ml/acquisition/collect_emg.py --subject S01 --label hello --reps 20 --por
 python ml/acquisition/validate_dataset.py
 ```
 
+**The app:**
+
+```powershell
+cd frontend; npm install; npm run dev    # http://localhost:3000
+```
+
+Web Bluetooth needs Chrome or Edge on desktop/Android, over localhost or HTTPS —
+Firefox, Safari and all iOS browsers have no support and the app falls back to the
+phrasebook. To reach it from a phone on the same network, serve over HTTPS; plain
+`http://<lan-ip>:3000` is treated as an insecure origin and Bluetooth is blocked.
+
+The app subscribes to a fourth BLE characteristic, `ASV_BLE_WORD_UUID`, that carries
+recognised words (`0xC3` magic, confidence byte, length byte, ASCII text — one
+notification). Nothing on the ESP32 classifies yet, so the only producer today is the
+`w` serial command; `asvBleNotifyWord()` is where a real model would publish.
+
 ---
 
 ## Firmware serial commands
 
 Single letters, no Enter needed:
 `h` help · `t` self-test · `i` I2C scan · `m` live monitor · `n` noise floor ·
-`s` start CSV stream · `x` stop · `g` cycle gain · `o` toggle OLED · `r` reset counters · `?` status
+`s` start CSV stream · `x` stop · `g` cycle gain · `o` toggle OLED · `r` reset counters ·
+`w` push a test word over BLE · `?` status
 
 The firmware **boots into IDLE** and streams only after `s`. `collect_emg.py` does this
 handshake automatically. If something reports zero samples, that handshake is the first

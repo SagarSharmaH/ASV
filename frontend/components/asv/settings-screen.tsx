@@ -1,238 +1,261 @@
 "use client"
 
-import { motion } from "framer-motion"
-import {
-  ChevronLeft,
-  ChevronRight,
-  Sliders,
-  Globe,
-  Volume2,
-  Moon,
-  Sun,
-  Accessibility,
-  Info,
-  HelpCircle,
-  LogOut,
-} from "lucide-react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { Slider } from "@/components/ui/slider"
-import { useState } from "react"
+/**
+ * SettingsScreen — choosing the voice that will speak for you.
+ *
+ * This is not a preferences page in the usual sense. For someone who uses ASV
+ * daily, the voice picked here is the voice other people will associate with
+ * them, so it gets a preview button and top billing.
+ */
+import { Bluetooth, Check, Volume2 } from "lucide-react"
+import type { useSpeech } from "@/hooks/use-speech"
+import type { useBLE } from "@/hooks/use-ble"
 
 interface SettingsScreenProps {
-  onBack: () => void
+  speech: ReturnType<typeof useSpeech>
+  ble: ReturnType<typeof useBLE>
+  largeText: boolean
+  onLargeTextChange: (v: boolean) => void
+  darkMode: boolean
+  onDarkModeChange: (v: boolean) => void
 }
 
-export function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const [isDarkMode, setIsDarkMode] = useState(false)
-  const [sensitivity, setSensitivity] = useState([75])
-  const [volume, setVolume] = useState([80])
+const PREVIEW = "Hello, I am using ASV to speak with you."
 
-  const BackgroundElements = () => (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <motion.div
-        className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-primary/5 blur-3xl"
-        animate={{ scale: [1, 1.2, 1] }}
-        transition={{ duration: 12, repeat: Infinity }}
-      />
-      <motion.div
-        className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-primary/6 blur-3xl"
-        animate={{ scale: [1.2, 1, 1.2], opacity: [0.3, 0.5, 0.3] }}
-        transition={{ duration: 10, repeat: Infinity }}
-      />
-    </div>
-  )
-
-  const settingsGroups = [
-    {
-      title: "Device",
-      items: [
-        {
-          icon: Sliders,
-          label: "Calibration",
-          description: "Calibrate EMG sensors",
-          action: "navigate",
-        },
-        {
-          icon: Volume2,
-          label: "Output Volume",
-          description: `${volume}%`,
-          action: "slider",
-          sliderValue: volume,
-          onSliderChange: setVolume,
-        },
-      ],
-    },
-    {
-      title: "Detection",
-      items: [
-        {
-          icon: Globe,
-          label: "Language",
-          description: "English (US)",
-          action: "navigate",
-        },
-        {
-          icon: Sliders,
-          label: "Sensitivity",
-          description: `${sensitivity}%`,
-          action: "slider",
-          sliderValue: sensitivity,
-          onSliderChange: setSensitivity,
-        },
-      ],
-    },
-    {
-      title: "Appearance",
-      items: [
-        {
-          icon: isDarkMode ? Moon : Sun,
-          label: "Dark Mode",
-          description: isDarkMode ? "On" : "Off",
-          action: "toggle",
-          toggleValue: isDarkMode,
-          onToggle: setIsDarkMode,
-        },
-        {
-          icon: Accessibility,
-          label: "Accessibility",
-          description: "Visual & audio settings",
-          action: "navigate",
-        },
-      ],
-    },
-    {
-      title: "Support",
-      items: [
-        {
-          icon: HelpCircle,
-          label: "Help Center",
-          description: "FAQs and guides",
-          action: "navigate",
-        },
-        {
-          icon: Info,
-          label: "About ASV",
-          description: "Version 1.0.0",
-          action: "navigate",
-        },
-      ],
-    },
-  ]
+export function SettingsScreen({
+  speech,
+  ble,
+  largeText,
+  onLargeTextChange,
+  darkMode,
+  onDarkModeChange,
+}: SettingsScreenProps) {
+  // Long voice lists (some desktops ship 100+) are unusable on a phone; English
+  // voices are what this vocabulary is written for.
+  const voices = speech.voices.filter((v) => v.lang.toLowerCase().startsWith("en"))
+  const listed = voices.length > 0 ? voices : speech.voices
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background px-6 py-8">
-      <BackgroundElements />
-      
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8 flex items-center gap-4"
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onBack}
-          className="h-10 w-10 rounded-xl"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Customize your experience
+    <div className="flex h-full flex-col">
+      <header className="px-5 pb-4 pt-6">
+        <h1 className="font-display text-3xl font-bold">Your voice</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          How ASV sounds when it speaks for you.
+        </p>
+      </header>
+
+      <div className="flex-1 space-y-5 overflow-y-auto no-scrollbar px-5 pb-4">
+        {!speech.supported && (
+          <p className="rounded-[var(--radius-md)] border border-destructive/30 bg-destructive/8 p-4 text-sm leading-relaxed text-muted-foreground">
+            This browser has no speech synthesis, so nothing can be spoken aloud. Chrome,
+            Edge and Safari all support it.
           </p>
-        </div>
-      </motion.div>
+        )}
 
-      {/* Settings Groups */}
-      <div className="space-y-6">
-        {settingsGroups.map((group, groupIndex) => (
-          <motion.div
-            key={group.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 + groupIndex * 0.1 }}
-          >
-            <p className="mb-3 px-1 text-sm font-medium text-muted-foreground">
-              {group.title}
+        <section className="card-soft p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Voice
+            </span>
+            <button
+              onClick={() => speech.speak(PREVIEW)}
+              className="flex min-h-0 items-center gap-1.5 rounded-full voice-gradient px-3 py-1.5 text-xs font-bold text-[#2a1c0c]"
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+              Preview
+            </button>
+          </div>
+
+          <div className="max-h-56 space-y-1.5 overflow-y-auto no-scrollbar">
+            {listed.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Loading voices…
+              </p>
+            ) : (
+              listed.map((v) => {
+                const on = v.voiceURI === speech.settings.voiceURI
+                return (
+                  <button
+                    key={v.voiceURI}
+                    onClick={() => speech.update({ voiceURI: v.voiceURI })}
+                    className={`flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2.5 text-left ${
+                      on ? "bg-secondary" : ""
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{v.name}</span>
+                      <span className="block text-xs text-muted-foreground">{v.lang}</span>
+                    </span>
+                    {on && <Check className="h-4 w-4 shrink-0 text-[var(--voice-deep)]" />}
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </section>
+
+        <section className="card-soft space-y-5 p-4">
+          <Slider
+            label="Speed"
+            value={speech.settings.rate}
+            min={0.5}
+            max={1.6}
+            step={0.05}
+            format={(v) => `${v.toFixed(2)}×`}
+            onChange={(rate) => speech.update({ rate })}
+          />
+          <Slider
+            label="Pitch"
+            value={speech.settings.pitch}
+            min={0.5}
+            max={1.8}
+            step={0.05}
+            format={(v) => v.toFixed(2)}
+            onChange={(pitch) => speech.update({ pitch })}
+          />
+          <Slider
+            label="Volume"
+            value={speech.settings.volume}
+            min={0.1}
+            max={1}
+            step={0.05}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(volume) => speech.update({ volume })}
+          />
+        </section>
+
+        <section className="card-soft divide-y divide-border">
+          <Toggle
+            label="Speak words as they arrive"
+            hint="Each recognised word is spoken immediately, not only when you send the sentence."
+            value={speech.settings.autoSpeak}
+            onChange={(autoSpeak) => speech.update({ autoSpeak })}
+          />
+          <Toggle
+            label="Larger text"
+            hint="Scales the whole app up for easier reading at a distance."
+            value={largeText}
+            onChange={onLargeTextChange}
+          />
+          <Toggle
+            label="Dark theme"
+            hint="Easier on the eyes in a hospital room at night."
+            value={darkMode}
+            onChange={onDarkModeChange}
+          />
+        </section>
+
+        <section className="card-soft p-4">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Band
+          </span>
+          <div className="mt-3 flex items-center gap-3">
+            <Bluetooth
+              className={`h-5 w-5 ${
+                ble.status === "connected" ? "text-[var(--link-teal)]" : "text-muted-foreground"
+              }`}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                {ble.status === "connected" ? ble.deviceName ?? "ASV band" : "Not connected"}
+              </p>
+              {ble.packet && (
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {ble.packet.rateHz.toFixed(0)} Hz · {ble.packet.sampleCount.toLocaleString()}{" "}
+                  samples · {ble.packet.dropped} dropped
+                </p>
+              )}
+            </div>
+            {ble.status === "connected" && (
+              <button
+                onClick={ble.disconnect}
+                className="min-h-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+              >
+                Disconnect
+              </button>
+            )}
+          </div>
+          {ble.status === "connected" && !ble.hasWordChannel && (
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+              This band reports signal quality but is not sending recognised words yet — the
+              model has not been trained. Tap words on the Speak screen in the meantime.
             </p>
-            <Card className="overflow-hidden shadow-sm">
-              {group.items.map((item, itemIndex) => (
-                <div
-                  key={item.label}
-                  className={`p-4 ${
-                    itemIndex !== group.items.length - 1
-                      ? "border-b border-border"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary">
-                      <item.icon className="h-5 w-5 text-secondary-foreground" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                    {item.action === "navigate" && (
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    {item.action === "toggle" && (
-                      <Switch
-                        checked={item.toggleValue}
-                        onCheckedChange={item.onToggle}
-                      />
-                    )}
-                  </div>
-                  {item.action === "slider" && (
-                    <div className="mt-4 px-14">
-                      <Slider
-                        value={item.sliderValue}
-                        onValueChange={item.onSliderChange}
-                        max={100}
-                        step={1}
-                        className="w-full"
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </Card>
-          </motion.div>
-        ))}
+          )}
+        </section>
       </div>
-
-      {/* Sign Out Button */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="mt-8"
-      >
-        <Button
-          variant="ghost"
-          className="h-14 w-full gap-2 rounded-2xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="h-5 w-5" />
-          Sign Out
-        </Button>
-      </motion.div>
-
-      {/* Footer */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
-        className="mt-auto pt-8 text-center"
-      >
-        <p className="text-sm text-muted-foreground">ASV – A Silent Voice</p>
-        <p className="text-xs text-muted-foreground/60">Version 1.0.0</p>
-      </motion.div>
     </div>
+  )
+}
+
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  format,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  format: (v: number) => string
+  onChange: (v: number) => void
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{format(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-secondary accent-[var(--voice-deep)]"
+      />
+    </label>
+  )
+}
+
+function Toggle({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={value}
+      onClick={() => onChange(!value)}
+      className="flex w-full items-center gap-4 p-4 text-left"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{hint}</span>
+      </span>
+      <span
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+          value ? "voice-gradient" : "bg-secondary"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-card shadow transition-all ${
+            value ? "left-6" : "left-1"
+          }`}
+        />
+      </span>
+    </button>
   )
 }

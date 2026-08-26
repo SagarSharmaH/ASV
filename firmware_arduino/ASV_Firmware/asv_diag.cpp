@@ -305,6 +305,7 @@ void asvDiagPrintHelp() {
   Serial.println(F("   g  cycle ADC gain (resolution vs range)"));
   Serial.println(F("   o  toggle OLED"));
   Serial.println(F("   r  reset counters"));
+  Serial.println(F("   w  send a test word over BLE (app display + speech check)"));
   Serial.println(F("   ?  print current status line"));
   rule();
   Serial.println();
