@@ -57,12 +57,17 @@ new donning should cover all five words.
 (`questionable_electrode_20260823/`, `TEST/`). Do not fold them back in without
 re-checking electrode contact first.
 
-**This data is gitignored and lives only on disk.** `.gitignore` excludes
-`datasets/custom_silent_speech/` and `*.csv`, so cloning this repo gets you **no
-recordings at all**, git will not save you, and `git clean -xdf` would destroy
-them. Back up before any cleanup. On the machine the data was collected on,
-verified copies sit in `%USERPROFILE%\ASV_backups\`, newest
-`asv_S01_250rec_5sessions_20260826_210608` — ask for a copy, it is not in git.
+**This data is committed to the repo** (~10 MB), deliberately: a clone has to
+arrive with the recordings, or the next person starts from scratch on a dataset
+that took hours of articulation to collect. `.gitignore` still excludes `*.csv`
+globally, so the negations under `datasets/custom_silent_speech/` are what keep
+it tracked — do not remove them.
+
+Recording data is the one thing here that cannot be regenerated from source, so
+keep a copy outside the repo as well; `git clean -xdf` and a bad rebase are both
+capable of losing work git has not been told about yet.
+
+`datasets/ninapro_db1/` (3.2 GB) stays ignored and must never be committed.
 
 Do not reintroduce NinaPro DB1 (`datasets/ninapro_db1/` — 3.2 GB, still on disk,
 unused): it is forearm/hand gesture EMG and cannot transfer to jaw articulation.
