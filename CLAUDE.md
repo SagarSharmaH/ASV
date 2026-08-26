@@ -17,29 +17,183 @@ jaw electrodes -> AD8232 -> ADS1115 (A0) -> ESP32 -> USB CSV -> Python -> model
 |---|---|
 | Firmware (`firmware_arduino/`) | **Working and current.** 860 SPS, interrupt-paced, self-testing. |
 | Acquisition (`ml/acquisition/`) | Working and tested; matches firmware v2 stream format. |
-| Tests (`tests/test_pipeline.py`) | 23/23 passing. Run them after touching `ml/`. |
-| Datasets | **Empty.** No valid recordings exist yet. |
-| ML pipeline (`ml/`) | Code exists, has never produced a trained model. `ml/models/` is empty. |
-| Backend (`backend/main.py`) | FastAPI inference server, code complete, **never run** — no model to serve. |
-| Frontend (`frontend/`) | Assistive-communication app. Web Bluetooth and text-to-speech are **real**. The recognised-word feed is not — no model exists, so words come from taps or the firmware's `w` test command. |
+| Tests (`tests/test_pipeline.py`) | 46/46 passing. Run them after touching `ml/`. |
+| Datasets | **Real data exists.** 250 jaw-EMG recordings, one subject (S01), five electrode sessions on 2026-08-26. See below. |
+| ML pipeline (`ml/refined/`) | Trained. `refined_model/` holds an SVM_rbf: **67.2% pooled**, **63.5% on an unseen donning** over 5 words. A 3-word subset reaches 90%. See below. |
+| Legacy ML (`ml/training/`, `ml/inference/`, `ml/preprocessing/`) | The old per-window pipeline, superseded — it labelled silence as speech and stalled near 48%. `ml/models/latest` and `ml/models/demo_hello_rest` are deleted; code still pointing at them is stale. |
+| Backend (`backend/main.py`) | FastAPI inference server over `refined_model/`. **Verified working 2026-08-26**: `/health`, `/model/status` and `/predict_utterance` all respond correctly against real recordings. Start with `python -m uvicorn backend.main:app --port 8000`. |
+| Frontend (`frontend/`) | Assistive-communication app, deliberately thin. Connects over Bluetooth, shows the word the OLED is showing, speaks it, and offers a tap-a-word phrasebook. No muscle-activity display, no USB connection of its own. |
 
-**Do not** describe this project as working end-to-end. It is at the "getting real
-signal off the hardware" stage.
+The honest summary: acquisition, offline classification and the app's recognition
+path all work, so a mouthed word can reach the screen and be spoken, and accuracy
+now largely survives re-applying the electrodes. What is still missing is
+on-device classification — a PC running the backend is always in the loop — and
+five-word accuracy is 63.5%, workable but not reliable. **Do not** describe this
+as a working wearable.
 
-### Dataset warning
+### The dataset — `datasets/custom_silent_speech/`
 
-There is currently **no training data at all**. The synthetic CSVs and the NinaPro DB1
-dump were deleted during cleanup — NinaPro was forearm/hand gesture EMG, a domain that
-cannot transfer to jaw articulation, and the synthetic set was Gaussian noise.
+250 recordings: 5 words (`hi, help, no, rest, yes`) x 50 reps, subject S01,
+**five electrode sessions** on 2026-08-26. 2.5 s each at ~860.9 Hz,
+`mode: rdy_irq`, zero malformed packets, all validating `GOOD`.
 
-The only path forward is recording real jaw-EMG with `ml/acquisition/collect_emg.py`.
-Do not reintroduce either dataset.
+| Session | Time | n | Words | Usable as a test fold |
+|---|---|---|---|---|
+| A | 16:40-16:46 | 40 | 4 (no `hi`) | no |
+| B | 18:38-18:43 | 40 | 4 (no `hi`) | no |
+| C | 19:04-19:07 | 20 | 1 (`hi` only) | no |
+| D | 20:12-20:18 | 50 | all 5 | yes |
+| E | 20:48-20:58 | 100 | all 5 | yes |
+
+**Sessions come from recording timestamps, not the rep index.** `tools/session_eval.py`
+splits wherever consecutive recordings are more than 15 minutes apart, which is why
+the `timestamp` in each `_meta.json` matters — do not discard the sidecars.
+
+A session is only a valid test fold if it contains **every** word. A and B predate the
+`hi` rename; C holds `hi` alone and scored exactly chance, which told us nothing. Every
+new donning should cover all five words.
+
+`_excluded/` holds 44 earlier recordings quarantined rather than deleted
+(`questionable_electrode_20260823/`, `TEST/`). Do not fold them back in without
+re-checking electrode contact first.
+
+**This data is gitignored and lives only on disk.** `.gitignore` excludes
+`datasets/custom_silent_speech/` and `*.csv`, so cloning this repo gets you **no
+recordings at all**, git will not save you, and `git clean -xdf` would destroy
+them. Back up before any cleanup. On the machine the data was collected on,
+verified copies sit in `%USERPROFILE%\ASV_backups\`, newest
+`asv_S01_250rec_5sessions_20260826_210608` — ask for a copy, it is not in git.
+
+Do not reintroduce NinaPro DB1 (`datasets/ninapro_db1/` — 3.2 GB, still on disk,
+unused): it is forearm/hand gesture EMG and cannot transfer to jaw articulation.
+Same for synthetic `datasets/emg_dataset.csv` / `emg_features.csv`, which are
+Gaussian noise from the pre-hardware era.
+
+**Vocabulary change 2026-08-26:** `hello` was dropped and replaced with `hi`. It was
+the worst class in every evaluation and live testing confirmed it. Its recordings
+survive in `asv_S01_100rec_2sessions_20260826_184910`. Worth knowing: `hi` initially
+landed at the same weak precision, so the word itself was never the problem — it only
+became the strongest non-`rest` class once several donnings existed.
+
+### The model — `refined_model/`
+
+One recording = one sample. 23 utterance-level features (energy, envelope shape,
+burst timing, spectrum) from `ml/refined/utterance_features.py`, shared by training
+and inference so the two cannot drift apart.
+
+Retrained 2026-08-26 on 250 recordings: SVM_rbf, **67.2% pooled leave-one-out**,
+**63.5% out-of-session**, chance 20%.
+
+Quote the out-of-session number. The headline figure has moved around a lot as the
+dataset grew (76% -> 67% -> 61% -> 67.2%) purely because pooled accuracy tracks how
+much session leakage is available, not how good the model is. Out-of-session went
+29% -> 52% -> 63.5% over the same period, which is the real trajectory.
+
+### Cross-session transfer — the problem that is being solved
+
+A "session" is one donning of the electrodes. Re-applying them changes the signal
+more than changing the word does, so a model trained on one donning historically
+did not transfer to the next. Collecting more donnings is fixing it, and the
+progression is the most important measurement in the project:
+
+| Sessions in the dataset | Out-of-session accuracy |
+|---|---|
+| 2 (2026-08-26, 100 recordings) | 29% |
+| 4 (150 recordings) | 52% — one valid fold |
+| **5 (250 recordings)** | **63.5% — two valid folds** |
+
+Chance is 20%. More importantly, the gap between the optimistic and the honest
+number has collapsed: pooled leave-one-recording-out is now 67.2% against 63.5%
+out-of-session, an inflation of only **+3.7%**, down from +11% at four sessions.
+The model has largely stopped keying on session identity. The two folds agree
+closely (D 64.0%, E 63.0%), so this number is far more trustworthy than the
+single-fold 52% it replaces.
+
+**Keep collecting donnings.** This is the highest-value work available and it is
+measurably paying off. Ten reps of every word per donning, electrodes re-applied
+between batches.
+
+Always measure with `python tools/session_eval.py`. It recovers sessions from
+recording timestamps (splitting at gaps > 15 min), refuses to score a session
+that does not contain every word, and prints both numbers side by side so the
+inflation stays visible.
+
+#### Vocabulary size is the other lever
+
+Measured out-of-session on the 250-recording set, best subset at each size:
+
+| Words | Out-of-session | Chance | Best subset |
+|---|---|---|---|
+| 5 | 63.5% | 20% | help, hi, no, rest, yes |
+| 4 | 76.2% | 25% | help, hi, rest, yes |
+| 3 | **90.0%** | 33% | hi, no, rest |
+| 2 | 95.0% | 50% | hi, rest |
+
+`rest` and `hi` are cleanly separable (out-of-session f1 0.90 and 0.88). The
+errors concentrate almost entirely in `help` / `no` / `yes`, which confuse with
+each other: `yes` is the worst class at f1 0.36, going to `no` 11 times and
+`help` 9 times out of 30. Note that `no` appears in the best 3-word set but is
+dropped from the best 4-word set — at 50 recordings per word that ordering is
+within noise, so re-measure before treating any specific subset as settled.
+
+**A three-word vocabulary is demo-quality today at 90%.** Five words is not.
+That is a product decision, not a modelling one.
+
+### How a word reaches the app
+
+Nothing on the ESP32 classifies. The PC runs the model and pushes the answer to the
+board, which shows it on the OLED **and** notifies it over BLE in the same step, so
+the display and the phone can never disagree.
+
+```
+electrodes -> ESP32 --USB CSV--> PC runs the model
+                                     |
+                      "w<word>\n" over serial
+                                     v
+                          ESP32  --> OLED  (2 s)
+                                 --> BLE   --> app shows + speaks it
+```
+
+That is the whole path. `tools/predict_live.py` and `tools/predict_live_gui.py`
+both call it after every prediction; the firmware end is the word-reading branch
+in `ASV_Firmware.ino`, which sets `g_predictedWord` and then calls
+`asvBleNotifyWord(g_predictedWord, 90)`.
+
+**Before 2026-08-26 the serial word path set the OLED text but never notified BLE**,
+which is why words appeared on the display and never reached the phone. One line
+fixed it. Any future code that changes what the OLED shows must keep the BLE
+notify beside it.
+
+The app is deliberately thin: it connects over Bluetooth, shows words that arrive,
+speaks them, and offers a tap-a-word phrasebook. It does **not** display muscle
+activity and does **not** open a USB connection of its own.
+
+#### Also present but unused: the BLE capture burst
+
+`asvBleSendCapture()` in firmware and `captureUtterance()` in `use-ble.ts`
+implement a different design — the app writes `c`, the ESP32 records 2.5 s into RAM
+and bursts ~4.3 kB back, and the phone hands the samples to the backend. Wire format:
+
+```
+header  [0]=0xC5 [1]=0x00 [2..3]=total samples [4..5]=sample rate Hz
+chunk   [0]=0xC5 [1]=0x01 [2..3]=start index   [4..]=int16 counts
+footer  [0]=0xC5 [1]=0x02
+```
+
+It round-trips correctly under test but no screen calls it. It is the path to a
+phone-only product that does not need a PC at all — worth reviving once the model
+moves on-device. `frontend/hooks/use-emg-recognition.ts` is its unused driver.
+Continuous 860 SPS over BLE still does not work; the burst is a one-shot after
+recording, which is a different problem.
 
 ### Deleted — do not recreate
 
-`firmware/` (PlatformIO), `ml/legacy_experimental/`, `ml/run_pipeline.*`,
-`datasets/emg_dataset.csv`, `datasets/emg_features.csv`, and the PlatformIO-era docs.
-All recoverable from the first git commit if genuinely needed.
+`ml/models/latest/` and `ml/models/demo_hello_rest/` (superseded by
+`refined_model/`). Recoverable from git history if genuinely needed.
+
+Note: `firmware/` (PlatformIO), `ml/legacy_experimental/` and `ml/run_pipeline.ps1`
+are still present but dead — `firmware_arduino/` is the live firmware. Do not edit
+the PlatformIO tree.
 
 ---
 
@@ -77,7 +231,10 @@ These exist to fix specific measured problems. Reverting any of them silently co
    conversion-ready trick needs exact control of the threshold registers, and that
    library's API changed between versions.
 6. **BLE carries a 20 Hz status packet, not the raw stream.** BLE throughput cannot
-   sustain 860 SPS; pretending otherwise backs up and distorts timing.
+   sustain 860 SPS; pretending otherwise backs up and distorts timing. The `c`
+   capture burst is not an exception to this: it records into RAM first and sends
+   ~4.3 kB *afterwards*, so nothing is being sustained. Do not read it as licence
+   to stream continuously.
 7. **The I2C pointer register is cached** (`g_pointerReg`) so a sample read is one
    transaction, not two. Any code that writes an ADS1115 register must update it.
 
@@ -109,9 +266,35 @@ python tools/asv_serial.py --list                             # available ports
 **Data collection and QA:**
 
 ```powershell
-python ml/acquisition/collect_emg.py --subject S01 --label hello --reps 20 --port COM3
-python ml/acquisition/validate_dataset.py
+# dataset manager — the front door for everything data-related
+python tools/manage_dataset.py status                              # counts per word
+python tools/manage_dataset.py collect-all --reps 10 --port COM5   # all 5 words
+python tools/manage_dataset.py collect --word no --reps 10 --port COM5
+python tools/manage_dataset.py delete --word no                    # destructive; back up first
+python tools/manage_dataset.py retrain
+python tools/session_eval.py                     # HONEST accuracy: leave-one-session-out
+
+# or drive collection directly
+python ml/acquisition/collect_emg.py --subject S01 --label hi --reps 20 --port COM3
+python ml/acquisition/validate_dataset.py       # writes metadata/validation_report.json
+python tools/check_interference.py --port COM5   # mains-hum / contact check BEFORE collecting
 ```
+
+Recording duration is **2.5 s** everywhere (collection, live prediction). If you
+change it, change it in all three places or the features shift under the model.
+
+**Training and inference:**
+
+```powershell
+python ml/refined/train_refined.py              # rebuilds refined_model/ in place
+python refined_model/predict.py <recording.csv> # classify one saved recording
+python tools/predict_live.py --port COM5        # live, CLI
+python tools/predict_live_gui.py --port COM5    # live, Tkinter window
+```
+
+`train_refined.py` overwrites `refined_model/` — the previous model is only in git
+(and the `.pkl` files there *are* tracked). Commit before retraining if the current
+one matters.
 
 **The app:**
 
@@ -136,7 +319,7 @@ notification). Nothing on the ESP32 classifies yet, so the only producer today i
 Single letters, no Enter needed:
 `h` help · `t` self-test · `i` I2C scan · `m` live monitor · `n` noise floor ·
 `s` start CSV stream · `x` stop · `g` cycle gain · `o` toggle OLED · `r` reset counters ·
-`w` push a test word over BLE · `?` status
+`w` push a test word over BLE · `c` capture one utterance and burst it over BLE · `?` status
 
 The firmware **boots into IDLE** and streams only after `s`. `collect_emg.py` does this
 handshake automatically. If something reports zero samples, that handshake is the first
@@ -160,6 +343,32 @@ thing to check.
   a firmware bug — suspect it before blaming the model.
 - **GPIO34/35 are input-only** and have no internal pull-ups. That is intentional here.
 - **Do not use GPIO 6–11** (SPI flash) or GPIO 0/2/12/15 (strapping pins) for new signals.
+- **Peak-to-peak jumping from ~100 mV to ~2000-3000 mV is mains hum, not a bad electrode.**
+  Seen 2026-08-23 and again 2026-08-26. Three electrode swaps changed nothing both times,
+  because the electrodes were never the fault: 78-85% of signal power sat in a 50 Hz band
+  and the AD8232 was driven rail-to-rail (counts 3432..26269 against a 0..26500 rail).
+  A saturated front end has *lost* the muscle signal — the 50/100 Hz notch in
+  `utterance_features.preprocess()` cannot recover it, so never train on data captured in
+  this state. Check with `python tools/check_interference.py --port COM5` before every
+  collection run. Healthy reference (the 08-26 batch): pp 56..498 mV, 50 Hz power ~3.7%,
+  baseline ~1692 mV. Usual cause, in order: laptop on its AC charger (run on battery), the
+  reference/RL electrode not actually connected (jack not fully seated — put it on bone,
+  not muscle), proximity to power strips and chargers, AD8232 GND not truly common with
+  the ESP32.
+- **`venv/` has no pyserial.** Anything touching the board (`collect_emg.py`,
+  `predict_live*.py`, `check_interference.py`, `asv_serial.py`) must run under the system
+  `python`. The venv is for offline model work only.
+- **`venv/` has no pytest.** Run the suite with the system `python -m pytest tests/ -q`.
+  `venv/Scripts/python.exe` does have sklearn 1.8 and is what loads the `.pkl` files.
+- **Console output is cp1252 on Windows.** Any script printing `✓`/`⚠` will raise
+  `UnicodeEncodeError` mid-run. `validate_dataset.py` used to die this way *before*
+  writing its JSON report, silently leaving a stale report on disk — it now forces
+  UTF-8 on stdout. Do the same in new CLI tools.
+- **`collect_emg.py` continues rep numbering from the existing files.** Adding 10 more
+  reps to a folder that already has `rep001..rep010` produces `rep011..rep020`, not a
+  second `rep001..rep010`. The on-screen counter still shows `Trial 1/10` with the real
+  index in brackets. It parses the highest existing `repNNN_` prefix, so don't rename
+  recordings to something that doesn't match that pattern.
 
 ---
 
