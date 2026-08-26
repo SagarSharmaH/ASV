@@ -34,6 +34,16 @@ void  asvBleNotify(const AsvBleStatus &s);
 // nothing calls this during normal operation - it is the channel the model will
 // publish through, and 'w' on the serial menu exercises it end to end.
 void  asvBleNotifyWord(const char *word, uint8_t confidence);
+// Send one captured utterance to the app as a burst of notifications on the
+// capture characteristic. Blocks for roughly (n / ASV_BLE_CAPTURE_CHUNK) *
+// ASV_BLE_CAPTURE_GAP_MS milliseconds, which is safe: this runs in loop() on
+// core 0 while the sampler owns core 1, so no samples are lost.
+//
+// Wire format, little-endian throughout:
+//   header  [0]=0xC5 [1]=0x00 [2..3]=total samples [4..5]=sample rate Hz
+//   chunk   [0]=0xC5 [1]=0x01 [2..3]=start index   [4..]=int16 counts
+//   footer  [0]=0xC5 [1]=0x02
+void  asvBleSendCapture(const int16_t *samples, uint16_t n, uint16_t fs);
 bool  asvBleConnected();
 const char *asvBleStateName();
 // Returns and clears the last single-byte command written by a BLE client

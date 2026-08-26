@@ -89,6 +89,25 @@
 #define ASV_BLE_STATUS_UUID   "6e6b0002-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_CMD_UUID      "6e6b0003-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_WORD_UUID     "6e6b0004-b5a3-f393-e0a9-e50e24dcca9e"
+#define ASV_BLE_CAPTURE_UUID  "6e6b0005-b5a3-f393-e0a9-e50e24dcca9e"
 #define ASV_BLE_NOTIFY_MS   50         // 20 Hz status/preview packets
 #define ASV_BLE_WORD_MAXLEN 16         // word packet is 3 header bytes + text,
                                        // and must fit one 20-byte notification
+
+// ---- Utterance capture over BLE --------------------------------------------
+// Streaming 860 SPS continuously over BLE does not work (see asv_ble.h). One
+// utterance is a different problem: 2.5 s is ~2150 samples = ~4.3 kB, sent once
+// as a burst after the recording finishes. That fits BLE comfortably and keeps
+// the sampler untouched, because the send happens on core 0 in loop() while the
+// sampler owns core 1.
+//
+// ASV_CAPTURE_SECONDS must match the training window (RECORD_SECONDS in the
+// Python tools, CAPTURE_SECONDS in the web app). Changing one alone silently
+// shifts every feature the model sees.
+#define ASV_CAPTURE_SECONDS       2.5f
+#define ASV_CAPTURE_MAX_SAMPLES   2400      // 2.5 s at 860 SPS + headroom
+// MTU is negotiated to 64 (ATT payload 61). 4 header bytes + 24 samples x 2 =
+// 52 bytes, comfortably inside that even if the peer negotiates a little lower.
+#define ASV_BLE_CAPTURE_CHUNK     24
+// Small gap between notifications so the BLE stack can flush its queue.
+#define ASV_BLE_CAPTURE_GAP_MS    8

@@ -23,6 +23,7 @@ static BLEServer         *g_server  = nullptr;
 static BLECharacteristic *g_status  = nullptr;
 static BLECharacteristic *g_cmd     = nullptr;
 static BLECharacteristic *g_word    = nullptr;
+static BLECharacteristic *g_capture = nullptr;
 static volatile bool      g_connected = false;
 static volatile char      g_pendingCmd = 0;
 
@@ -83,6 +84,15 @@ void asvBleBegin() {
     BLEDescriptor *cccd = new BLEDescriptor(BLEUUID(kCccdUuid));
     cccd->setValue(kCccdInit, sizeof(kCccdInit));
     g_word->addDescriptor(cccd);
+  }
+
+  g_capture = svc->createCharacteristic(
+      ASV_BLE_CAPTURE_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  if (g_capture->getDescriptorByUUID(BLEUUID(kCccdUuid)) == nullptr) {
+    BLEDescriptor *cccd = new BLEDescriptor(BLEUUID(kCccdUuid));
+    cccd->setValue(kCccdInit, sizeof(kCccdInit));
+    g_capture->addDescriptor(cccd);
   }
 
   svc->start();
@@ -155,6 +165,48 @@ void asvBleNotifyWord(const char *word, uint8_t confidence) {
   g_word->notify();
 }
 
+void asvBleSendCapture(const int16_t *samples, uint16_t n, uint16_t fs) {
+  if (!g_capture || !g_connected || !samples || n == 0) return;
+
+  uint8_t hdr[6];
+  hdr[0] = 0xC5;
+  hdr[1] = 0x00;                        // header
+  hdr[2] = (uint8_t)(n & 0xFF);
+  hdr[3] = (uint8_t)(n >> 8);
+  hdr[4] = (uint8_t)(fs & 0xFF);
+  hdr[5] = (uint8_t)(fs >> 8);
+  g_capture->setValue(hdr, sizeof(hdr));
+  g_capture->notify();
+  delay(ASV_BLE_CAPTURE_GAP_MS);
+
+  uint8_t buf[4 + ASV_BLE_CAPTURE_CHUNK * 2];
+  for (uint16_t i = 0; i < n; i += ASV_BLE_CAPTURE_CHUNK) {
+    // The client drops the whole capture if it disconnects mid-burst; stop
+    // early rather than spending a second notifying nobody.
+    if (!g_connected) return;
+
+    uint16_t m = n - i;
+    if (m > ASV_BLE_CAPTURE_CHUNK) m = ASV_BLE_CAPTURE_CHUNK;
+
+    buf[0] = 0xC5;
+    buf[1] = 0x01;                      // chunk
+    buf[2] = (uint8_t)(i & 0xFF);
+    buf[3] = (uint8_t)(i >> 8);
+    for (uint16_t k = 0; k < m; k++) {
+      int16_t v = samples[i + k];
+      buf[4 + k * 2] = (uint8_t)(v & 0xFF);
+      buf[5 + k * 2] = (uint8_t)((v >> 8) & 0xFF);
+    }
+    g_capture->setValue(buf, (size_t)(4 + m * 2));
+    g_capture->notify();
+    delay(ASV_BLE_CAPTURE_GAP_MS);
+  }
+
+  uint8_t ftr[2] = { 0xC5, 0x02 };      // footer
+  g_capture->setValue(ftr, sizeof(ftr));
+  g_capture->notify();
+}
+
 bool asvBleConnected() { return g_connected; }
 
 const char *asvBleStateName() { return g_connected ? "CONNECTED" : "ADVERTISING"; }
@@ -170,6 +222,7 @@ char asvBleTakeCommand() {
 void asvBleBegin() {}
 void asvBleNotify(const AsvBleStatus &) {}
 void asvBleNotifyWord(const char *, uint8_t) {}
+void asvBleSendCapture(const int16_t *, uint16_t, uint16_t) {}
 bool asvBleConnected() { return false; }
 const char *asvBleStateName() { return "DISABLED"; }
 char asvBleTakeCommand() { return 0; }

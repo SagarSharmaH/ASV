@@ -146,6 +146,41 @@ static void stopStream() {
 }
 
 // ============================================================================
+// UTTERANCE CAPTURE (BLE)
+// ============================================================================
+// The app asks for one utterance ('c'), we buffer it here as samples drain out
+// of the ADC ring, then burst it over BLE. This is what makes the device usable
+// with only a phone: no USB link, and no classifier on the ESP32 either - the
+// phone owns the model. Continuous BLE streaming still does not work and is not
+// what this does; see asv_config.h.
+static int16_t  g_capBuf[ASV_CAPTURE_MAX_SAMPLES];
+static uint16_t g_capCount   = 0;
+static uint16_t g_capTarget  = 0;
+static bool     g_capturing  = false;
+
+static void startCapture() {
+  if (g_capturing) return;
+  g_capTarget = (uint16_t)(ASV_CAPTURE_SECONDS * ASV_SPS);
+  if (g_capTarget > ASV_CAPTURE_MAX_SAMPLES) g_capTarget = ASV_CAPTURE_MAX_SAMPLES;
+  g_capCount  = 0;
+  g_capturing = true;
+  Serial.print(F("[CAP] capturing "));
+  Serial.print(g_capTarget);
+  Serial.println(F(" samples"));
+}
+
+// Called once the buffer is full. Sends on core 0; the sampler keeps running on
+// core 1 throughout, so the next capture is unaffected.
+static void finishCapture() {
+  g_capturing = false;
+  Serial.print(F("[CAP] sending "));
+  Serial.print(g_capCount);
+  Serial.println(F(" samples over BLE"));
+  asvBleSendCapture(g_capBuf, g_capCount, (uint16_t)ASV_SPS);
+  Serial.println(F("[CAP] done"));
+}
+
+// ============================================================================
 // COMMANDS
 // ============================================================================
 static void handleCommand(char c) {
@@ -184,6 +219,10 @@ static void handleCommand(char c) {
     case 's': case 'S': startStream(); break;
     case 'x': case 'X': stopStream();  break;
 
+    // Capture one utterance and burst it to the app over BLE. Needs samples
+    // flowing, which is what the sampler does regardless of streaming state.
+    case 'c': case 'C': startCapture(); break;
+
     case 'g': case 'G': {
       uint8_t next = (asvAdcGetGain() + 1) % 6;
       asvAdcSetGain(next);
@@ -206,7 +245,7 @@ static void handleCommand(char c) {
     case 'w': case 'W': {
       // Fires a word up the BLE word channel so the app's display + speech path
       // can be verified without a trained classifier. Cycles the vocabulary.
-      static const char *kWords[] = { "hello", "yes", "no", "help", "rest" };
+      static const char *kWords[] = { "hi", "yes", "no", "help", "rest" };
       static uint8_t idx = 0;
       const char *w = kWords[idx];
       idx = (idx + 1) % 5;
@@ -294,6 +333,10 @@ void loop() {
           strncpy(g_predictedWord, g_serialBuf, sizeof(g_predictedWord) - 1);
           g_predictedWord[sizeof(g_predictedWord) - 1] = '\0';
           g_predictionShowUntilMs = millis() + 2000; // Show for 2 seconds
+          // Whatever the OLED shows, the app shows too. The PC runs the model
+          // and pushes its result here with "w<word>\n"; this is the single
+          // point where a recognised word becomes visible, on both screens.
+          asvBleNotifyWord(g_predictedWord, 90);
         }
       } else if (g_serialIdx < sizeof(g_serialBuf) - 1) {
         g_serialBuf[g_serialIdx++] = c;
@@ -323,6 +366,10 @@ void loop() {
     if (s.v < g_winMin) g_winMin = s.v;
     if (s.v > g_winMax) g_winMax = s.v;
 
+    if (g_capturing && g_capCount < g_capTarget) {
+      g_capBuf[g_capCount++] = s.v;
+    }
+
     if (g_streaming) {
       char buf[24];
       int n = snprintf(buf, sizeof(buf), "%lu,%d\n", (unsigned long)s.t_us, (int)s.v);
@@ -330,6 +377,9 @@ void loop() {
       g_totalOut++;
     }
   }
+
+  // Send outside the drain loop so the ring keeps emptying while we buffer.
+  if (g_capturing && g_capCount >= g_capTarget) finishCapture();
 
   uint32_t now = millis();
 
