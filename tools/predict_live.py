@@ -120,10 +120,25 @@ def capture_utterance(conn, seconds=2.0):
     conn.write(b"x")
     return samples
 
+def send_word_to_board(conn, word):
+    """Hand a recognised word to the firmware as `w<word>\\n`.
+
+    The firmware puts it on the OLED and pushes it over BLE in the same step, so
+    the phone and the display never disagree. Nothing on the ESP32 classifies --
+    this is how the model's answer gets there.
+    """
+    if not conn or not word:
+        return
+    try:
+        conn.write(f"w{word}\n".encode("ascii", errors="ignore"))
+    except Exception as e:
+        print(f"  (could not send word to board: {e})")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Live Word Predictor (CLI)")
     parser.add_argument("--port", help="COM port for ESP32 (e.g. COM8)")
-    parser.add_argument("--seconds", type=float, default=2.0, help="Recording window size in seconds")
+    parser.add_argument("--seconds", type=float, default=2.5, help="Recording window size in seconds")
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
     args = parser.parse_args()
 
@@ -223,6 +238,11 @@ def main():
                 p = clf.predict_proba(x)[0]
                 conf = float(np.max(p))
                 ranking = sorted(zip(le.classes_, p), key=lambda t: -t[1])
+
+            # Push the word to the board. The firmware shows it on the OLED and
+            # notifies it over BLE, so the phone sees exactly what the display
+            # shows -- this is the only route a recognised word takes to the app.
+            send_word_to_board(conn, pred)
 
             # Output results
             print("\n" + "-"*35)
