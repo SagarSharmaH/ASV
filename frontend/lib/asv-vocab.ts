@@ -23,7 +23,7 @@ export interface VocabWord {
 }
 
 export const VOCAB: VocabWord[] = [
-  { token: "hello", display: "Hello", spoken: "Hello", glyph: "👋" },
+  { token: "hi", display: "Hi", spoken: "Hi", glyph: "👋" },
   { token: "yes", display: "Yes", spoken: "Yes", glyph: "✓" },
   { token: "no", display: "No", spoken: "No", glyph: "✕" },
   { token: "help", display: "Help", spoken: "I need help", glyph: "🆘", urgent: true },

@@ -80,6 +80,7 @@ export function ASVApp() {
 
   const ble = useBLE(handleBleWord)
 
+
   const speakSentence = useCallback(() => {
     if (sentence.length === 0) return
     // Join the natural phrasings, not the display labels: "I need help" reads as

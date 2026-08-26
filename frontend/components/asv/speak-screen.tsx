@@ -61,8 +61,6 @@ export function SpeakScreen({
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-4">
         <VoiceRing heard={heard} level={level} speaking={speech.speaking} live={connected} />
 
-        <SignalTrace envelope={ble.envelope} live={connected} />
-
         {/* Sentence being built */}
         <div className="mt-5 card-soft p-4">
           <div className="mb-3 flex items-center justify-between">
@@ -271,35 +269,4 @@ function VoiceRing({
   )
 }
 
-function SignalTrace({ envelope, live }: { envelope: number[]; live: boolean }) {
-  const w = 300
-  const h = 44
-  const step = w / Math.max(1, envelope.length - 1)
-  const points = envelope
-    .map((v, i) => `${(i * step).toFixed(1)},${(h - Math.min(1, v) * (h - 4) - 2).toFixed(1)}`)
-    .join(" ")
 
-  return (
-    <div className="mt-4 overflow-hidden rounded-[var(--radius-md)] border border-border bg-card px-3 py-2">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[0.65rem] font-semibold uppercase tracking-widest text-muted-foreground">
-          Muscle activity
-        </span>
-        <span className="text-[0.65rem] text-muted-foreground">
-          {live ? "live" : "no signal"}
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-11 w-full" preserveAspectRatio="none">
-        <polyline
-          points={points}
-          fill="none"
-          stroke={live ? "var(--link-teal)" : "currentColor"}
-          strokeWidth={1.75}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          className={live ? "" : "text-muted-foreground/30"}
-        />
-      </svg>
-    </div>
-  )
-}
